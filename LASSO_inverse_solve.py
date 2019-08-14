@@ -13,6 +13,7 @@ def LASSO_inverse_solve(data, waves):
     best_shift : starting time point in optimum
     best_speed_ind : index of the best speed
     """
+
     import numpy as np
     from sklearn.linear_model import ElasticNetCV
 
@@ -21,7 +22,7 @@ def LASSO_inverse_solve(data, waves):
     S = waves.shape[1] # number of propagation speeds
     Tw = waves.shape[3]
 
-    regression = ElasticNetCV(positive=True, normalize=True, cv=5, max_iter=10000) # elastic net regression
+    regression = ElasticNetCV(l1_ratio=1, positive=True) # elastic net regression
 
     coefs = np.zeros([R, S, Ndir]) # regression coefficients
     # intercept = np.zeros([R,S]) # regression intercept
