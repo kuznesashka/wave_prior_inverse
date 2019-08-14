@@ -1,4 +1,17 @@
 def generate_brain_noise(G, N=500, Fs=1000):
+    """Function to generate brain noise
+        Parameters
+        ----------
+        G : numpy.ndarray
+            Forward model matrix (N_channels x N_sources)
+        N : int
+            Number of active sources
+        Fs : int
+            Sampling frequency
+        Returns
+        -------
+        brain_noise : matrix with noise (N_channels x Fs)
+        """
 
     import numpy as np
     import mne
