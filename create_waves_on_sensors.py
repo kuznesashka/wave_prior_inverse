@@ -7,7 +7,6 @@ def create_waves_on_sensors(cortex, params, G, start_point):
     Fs = params['Fs']
 
     vertices = cortex[0][1]
-    faces = cortex[0][2]
     VertConn = cortex[0][3]
     VertNormals = cortex[0][4]
 
