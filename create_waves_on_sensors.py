@@ -1,4 +1,23 @@
 def create_waves_on_sensors(cortex, params, G, start_point, spheric):
+    """Function to compute the basis waves
+        Parameters
+        ----------
+        cortex : numpy.ndarray
+            Cortical model structure from brainstorm
+        params : dict
+            Wave parameters
+        G : numpy.ndarray
+            Forward model matrix
+        start_point : int
+            The wave starting vertex
+        spheric : bool
+            To add spherical wave or not
+        Returns
+        -------
+        sensor_waves : waves [n_dir x n_speeds x n_chann x T]
+        path_indices : indices of vertices in path [n_dir x max_step]
+        path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
+        """
 
     import numpy as np
 
