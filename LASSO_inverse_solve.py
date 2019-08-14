@@ -46,15 +46,19 @@ def LASSO_inverse_solve(data, waves):
 
     shifts_s = score.argmax(axis = 0) # best shifts for each speed
     score_s = score.max(axis = 0) # corresponding scores
-    nzdir_s = np.zeros(S) # corresponding number of nonzero directions (without intercept)
-    for s in range(0, S):
-        nzdir_s[s] = nzdir[shifts_s[s], s]
 
-    score_sort_ind = (-score_s).argsort() # indices of sorted scores for all speeds
-    dir_sort_ind = (nzdir_s[score_sort_ind[0:3]]).argsort() # indices of sorted number of nonzero directions for top-3 scores
+    # best solution according to the number of nonzero directions
+    # nzdir_s = np.zeros(S) # corresponding number of nonzero directions (without intercept)
+    # for s in range(0, S):
+    #     nzdir_s[s] = nzdir[shifts_s[s], s]
+    #
+    # score_sort_ind = (-score_s).argsort() # indices of sorted scores for all speeds
+    # dir_sort_ind = (nzdir_s[score_sort_ind[0:3]]).argsort() # indices of sorted number of nonzero directions for top-3 scores
+    #
+    # best_speed_ind = score_sort_ind[dir_sort_ind[0]] # index of best speed
 
-    best_speed_ind = score_sort_ind[dir_sort_ind[0]] # index of best speed
-    # best_dir = np.where(coefs[shifts_s[best_speed_ind], best_speed_ind]) # indices of nonzero directions in optimum
+    score_sort_ind = (-score_s).argsort()
+    best_speed_ind = score_sort_ind[0]
     best_coefs = coefs[shifts_s[best_speed_ind], best_speed_ind]
     best_score = score_s[best_speed_ind] # R-squared value in optimum
     best_shift = shifts_s[best_speed_ind]
