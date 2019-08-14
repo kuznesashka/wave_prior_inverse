@@ -118,19 +118,20 @@ def create_waves_on_sensors(cortex, params, G, start_point):
     for i in t:
         wave[i, :] = (1 + np.cos(2 * np.pi * (n - i) / ntpoints))
 
-    sensor_waves = np.zeros([num_dir+1, len(speeds), ntpoints, 102])
+    sensor_waves = np.zeros([num_dir+1, len(speeds), G.shape[0], ntpoints])
     for s in range(0, len(speeds)):
         for i in range(0, num_dir):
             for t in range(0, ntpoints):
-                fm_s = np.zeros([102, ntpoints])
+                fm_s = np.zeros([G.shape[0], ntpoints])
                 for k in range(0, ntpoints):
                     fm_s[:, k] = forward_model[i, s, k, :]
-                sensor_waves[i, s, t, :] = fm_s@wave[t].T
+                A = fm_s @ wave[t].T
+                sensor_waves[i, s, :, t] = A.T
 
     for s in range(0, len(speeds)):
         for t in range(0, ntpoints):
             for i in range(0, num_dir):
-                sensor_waves[num_dir, s, t, :] = sensor_waves[num_dir, s, t, :] + sensor_waves[i, s, t, :]
-            sensor_waves[num_dir, s, t, :] = sensor_waves[num_dir, s, t, :]/num_dir
+                sensor_waves[num_dir, s, :, t] = sensor_waves[num_dir, s, :, t] + sensor_waves[i, s, :, t]
+            sensor_waves[num_dir, s, :, t] = sensor_waves[num_dir, s, :, t]/num_dir
 
     return sensor_waves
