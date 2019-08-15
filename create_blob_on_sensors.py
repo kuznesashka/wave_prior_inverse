@@ -77,8 +77,8 @@ def create_blob_on_sensors(cortex, params, G, start_point, max_step=7):
     for i in range(1, len(x1)):
         for j in range(1, len(x2)):
             g[i, j] = A * np.exp(-(x1[i]**2 + x2[j]**2) / 2 * sigma**2)
-    plt.figure()
-    plt.imshow(g)
+    # plt.figure()
+    # plt.imshow(g)
     # plt.figure()
     # plt.plot(g[11, 1:11])
 
