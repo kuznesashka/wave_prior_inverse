@@ -1,4 +1,4 @@
-def create_blob_on_sensors(cortex, params, G, start_point, max_step=7):
+def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
     """Function to create static blob
         Parameters
         ----------
