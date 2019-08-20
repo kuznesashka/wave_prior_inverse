@@ -41,7 +41,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
     cortex = cortex_raw['cortex'][0]
     # vertices = cortex[0][1]
 
-    # ntpoints = int(params['duration']*params['Fs']+1)
+    ntpoints = int(params['duration']*params['Fs']+1)
 
     y_true = np.zeros(num_sim*2)
     y_true[0:num_sim] = np.ones(num_sim)
@@ -64,12 +64,12 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
         generate_direction = np.zeros(num_sim, dtype=int)
         generate_speed = np.zeros(num_sim, dtype=int)
         src_idx = np.zeros(num_sim, dtype=int)
-        brain_noise_norm = np.zeros([G.shape[0], params['Fs'],num_sim])
+        brain_noise_norm = np.zeros([G.shape[0], ntpoints, num_sim])
 
         # first Nsim trials with waves
         for sim_n in range(0, num_sim):
             src_idx[sim_n] = np.random.randint(0, G.shape[1])
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, src_idx[sim_n], spheric=0)
+            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, src_idx[sim_n], spherical=False)
 
             generate_direction[sim_n] = np.random.randint(0, sensor_waves.shape[0])
             generate_speed[sim_n] = np.random.randint(0, sensor_waves.shape[1])
@@ -99,7 +99,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
         for sim_n in range(num_sim, 2*num_sim):
             idx = src_idx[sim_n-num_sim]
             [sensor_blob, path_indices] = create_blob_on_sensors(cortex, params, G, idx)
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spheric=0)
+            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=0)
 
             brain_noise = brain_noise_norm[:, :, sim_n-num_sim]
             sensor_blob_norm = sensor_blob/np.linalg.norm(sensor_blob)
