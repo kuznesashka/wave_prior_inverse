@@ -72,7 +72,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical):
 
     ntpoints = int(Fs*duration)+1 # number of time points to generate
     path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
-    forward_model = np.zeros([num_dir, len(speeds), ntpoints, 102])
+    forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
     tstep = 1/Fs
 
     for s in range(0, len(speeds)):
