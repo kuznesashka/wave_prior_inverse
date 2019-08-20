@@ -32,12 +32,11 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
     elif channel_type == 'grad':
         G = G_raw['G'][np.setdiff1d(range(0,306), np.arange(2,306,3))] # gradiometers
     else:
-        print('Wrong channels name')
+        print('Wrong channel name')
     cortex = cortex_raw['cortex'][0]
     # vertices = cortex[0][1]
 
     # ntpoints = int(params['duration']*params['Fs']+1)
-
     y_true = np.zeros(num_sim*2)
     y_true[0:num_sim] = np.ones(num_sim)
     auc = np.zeros(len(snr))
@@ -78,10 +77,10 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             #     ax.scatter(path_final[d, 10, :, 0], path_final[d, 10, :, 1], path_final[d, 10, :, 2], marker = '^')
 
             brain_noise = generate_brain_noise(G)
-            brain_noise_norm[:, :, sim_n] = brain_noise/np.linalg.norm(brain_noise)
+            brain_noise_norm[:, :, sim_n] = brain_noise[:, sensor_waves.shape[3]]/np.linalg.norm(brain_noise[:, sensor_waves.shape[3]])
             wave_picked = sensor_waves[generate_direction[sim_n], generate_speed[sim_n], :, :]
             wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)
-            data = snr_level*wave_picked_norm + brain_noise_norm[:, :sensor_waves.shape[3], sim_n]
+            data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]
 
             # plt.figure()
             # plt.plot(data.T)
