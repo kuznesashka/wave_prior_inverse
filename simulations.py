@@ -1,22 +1,21 @@
 def simulations(data_dir, channel_type, params, snr, num_sim = 100):
-    """Function to compute simulations and plot ROC curve
+    """Function to run Monte Carlo simulations
             Parameters
             ----------
             data_dir : str
-                Directory with forward model matrix and cortical structure
+                Data directory with G.mat and cortex.mat
             channel_type : str
-                Type of channels used for modeling: 'grad' or 'mag'
+                Type of channels used 'grad' or 'mag'
             params : dict
-                Wave generation parameters
-            Num_sim : int
-                Number of Monte Carlo simulations for one class
+                Wave modeling parameters
             snr : list
-                List with used snr values
+                List with all considered snr values
+            num_sim : int
+                Number of simulations for one class
             Returns
             -------
-            auc : numpy.ndarray
-                AUC values for different snr levels
-            ROC plot
+            auc : AUC values for all snr levels
+            ROC curve plot
             """
 
     import scipy.io
@@ -27,16 +26,19 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
 
     G_raw = scipy.io.loadmat(data_dir+'/G.mat')
     cortex_raw = scipy.io.loadmat(data_dir+'/cortex.mat')
+
     if channel_type == 'mag':
         G = G_raw['G'][np.arange(2, 306, 3)]  # magnetometers
     elif channel_type == 'grad':
-        G = G_raw['G'][np.setdiff1d(range(0,306), np.arange(2,306,3))] # gradiometers
+        G = G_raw['G'][np.setdiff1d(range(0, 306), np.arange(2, 306, 3))]  # gradiometers
     else:
         print('Wrong channel name')
+
     cortex = cortex_raw['cortex'][0]
     # vertices = cortex[0][1]
 
     # ntpoints = int(params['duration']*params['Fs']+1)
+
     y_true = np.zeros(num_sim*2)
     y_true[0:num_sim] = np.ones(num_sim)
     auc = np.zeros(len(snr))
@@ -50,7 +52,6 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
 
-
     for snr_level in snr:
         # wave_fit = np.zeros(2*Num_sim, dtype=int)
         speed_fit = np.zeros([len(snr), num_sim], dtype=int)
@@ -59,7 +60,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
         generate_direction = np.zeros(num_sim, dtype=int)
         generate_speed = np.zeros(num_sim, dtype=int)
         src_idx = np.zeros(num_sim, dtype=int)
-        brain_noise_norm = np.zeros([G.shape[0], params['Fs'], num_sim])
+        brain_noise_norm = np.zeros([G.shape[0], params['Fs'],num_sim])
 
         # first Nsim trials with waves
         for sim_n in range(0, num_sim):
@@ -77,10 +78,10 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             #     ax.scatter(path_final[d, 10, :, 0], path_final[d, 10, :, 1], path_final[d, 10, :, 2], marker = '^')
 
             brain_noise = generate_brain_noise(G)
-            brain_noise_norm[:, :, sim_n] = brain_noise[:, sensor_waves.shape[3]]/np.linalg.norm(brain_noise[:, sensor_waves.shape[3]])
+            brain_noise_norm[:, :, sim_n] = brain_noise/np.linalg.norm(brain_noise)
             wave_picked = sensor_waves[generate_direction[sim_n], generate_speed[sim_n], :, :]
             wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)
-            data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]
+            data = snr_level*wave_picked_norm + brain_noise_norm[:, :sensor_waves.shape[3], sim_n]
 
             # plt.figure()
             # plt.plot(data.T)
