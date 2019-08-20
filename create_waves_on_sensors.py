@@ -1,4 +1,4 @@
-def create_waves_on_sensors(cortex, params, G, start_point, spheric):
+def create_waves_on_sensors(cortex, params, G, start_point, spherical):
     """Function to compute the basis waves
         Parameters
         ----------
@@ -10,7 +10,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spheric):
             Forward model matrix
         start_point : int
             The wave starting vertex
-        spheric : bool
+        spherical : bool
             To add spherical wave or not
         Returns
         -------
@@ -137,7 +137,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spheric):
     for i in t:
         wave[i, :] = (1 + np.cos(2 * np.pi * (n - i) / ntpoints))
 
-    if spheric == 1:
+    if spherical == 1:
         sensor_waves = np.zeros([num_dir+1, len(speeds), G.shape[0], ntpoints])
     else:
         sensor_waves = np.zeros([num_dir, len(speeds), G.shape[0], ntpoints])
@@ -149,7 +149,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spheric):
                     fm_s[:, k] = forward_model[i, s, k, :]
                 A = fm_s @ wave[t].T
                 sensor_waves[i, s, :, t] = A.T
-    if spheric == 1:
+    if spherical == 1:
         for s in range(0, len(speeds)):
             for t in range(0, ntpoints):
                 for i in range(0, num_dir):
