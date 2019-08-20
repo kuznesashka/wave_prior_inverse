@@ -78,10 +78,10 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             #     ax.scatter(path_final[d, 10, :, 0], path_final[d, 10, :, 1], path_final[d, 10, :, 2], marker = '^')
 
             brain_noise = generate_brain_noise(G)
-            brain_noise_norm[:, :, sim_n] = brain_noise/np.linalg.norm(brain_noise)
+            brain_noise_norm[:, :, sim_n] = brain_noise[:, :sensor_waves.shape[3]]/np.linalg.norm(brain_noise[:, :sensor_waves.shape[3]])
             wave_picked = sensor_waves[generate_direction[sim_n], generate_speed[sim_n], :, :]
             wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)
-            data = snr_level*wave_picked_norm + brain_noise_norm[:, :sensor_waves.shape[3], sim_n]
+            data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]
 
             # plt.figure()
             # plt.plot(data.T)
@@ -97,9 +97,9 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             [sensor_blob, path_indices] = create_blob_on_sensors(cortex, params, G, idx)
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spheric=0)
 
-            brain_noise =  brain_noise_norm[:, :, sim_n-num_sim]
+            brain_noise = brain_noise_norm[:, :, sim_n-num_sim]
             sensor_blob_norm = sensor_blob/np.linalg.norm(sensor_blob)
-            data = snr_level*sensor_blob_norm + brain_noise[:, :sensor_blob.shape[1]]
+            data = snr_level*sensor_blob_norm + brain_noise
 
             # plt.figure()
             # plt.plot(data.T)
