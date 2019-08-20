@@ -18,6 +18,10 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             ROC curve plot
             """
 
+    import create_blob_on_sensors
+    import create_waves_on_sensors
+    import generate_brain_noise
+    import LASSO_inverse_solve
     import scipy.io
     import numpy as np
     from sklearn import metrics
