@@ -63,10 +63,10 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
 
+    speed_fit = np.zeros([len(snr), num_sim], dtype=int)
+    direction_fit = np.zeros([len(snr), num_sim], dtype=int)
     for snr_level in snr:
         # wave_fit = np.zeros(2*Num_sim, dtype=int)
-        speed_fit = np.zeros([len(snr), num_sim], dtype=int)
-        direction_fit = np.zeros([len(snr), num_sim], dtype=int)
         score_fit = np.zeros(2*num_sim)
         generate_direction = np.zeros(num_sim, dtype=int)
         generate_speed = np.zeros(num_sim, dtype=int)
