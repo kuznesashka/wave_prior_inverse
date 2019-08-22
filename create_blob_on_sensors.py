@@ -25,9 +25,14 @@ def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
     duration = params['duration']
     Fs = params['Fs']
 
-    vertices = cortex[0][1]
-    VertConn = cortex[0][3]
-    VertNormals = cortex[0][4]
+    flag = 0
+    p = 2
+    while flag == 0:
+        if cortex[0][p].shape == (G.shape[1], G.shape[1]):
+            flag = 1
+        p += 1
+    VertConn = cortex[0][p - 1]
+    VertNormals = cortex[0][p]
 
     # Create matrix with template paths in different directions from the starting point
     neighbour_step_1 = VertConn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
