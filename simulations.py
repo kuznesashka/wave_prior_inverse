@@ -26,20 +26,27 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
     import numpy as np
     from sklearn import metrics
     import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
+    # from mpl_toolkits.mplot3d import Axes3D
 
     G_raw = scipy.io.loadmat(data_dir+'/G.mat')
     cortex_raw = scipy.io.loadmat(data_dir+'/cortex.mat')
+    G_dense_raw = scipy.io.loadmat(data_dir+'/G_dense.mat')
+    cortex_dense_raw = scipy.io.loadmat(data_dir+'/cortex_dense.mat')
 
     if channel_type == 'mag':
         G = G_raw['G'][np.arange(2, 306, 3)]  # magnetometers
+        G_dense = G_dense_raw['G'][np.arange(2, 306, 3)]  # magnetometers
     elif channel_type == 'grad':
         G = G_raw['G'][np.setdiff1d(range(0, 306), np.arange(2, 306, 3))]  # gradiometers
+        G_dense = G_dense_raw['G'][np.setdiff1d(range(0, 306), np.arange(2, 306, 3))]  # gradiometers
     else:
         print('Wrong channel name')
 
     cortex = cortex_raw['cortex'][0]
-    # vertices = cortex[0][1]
+    cortex_dense = cortex_dense_raw['cortex'][0]
+
+    vertices = cortex[0][1]
+    vertices_dense = cortex_dense[0][1]
 
     ntpoints = int(params['duration']*params['Fs']+1)
 
@@ -64,12 +71,18 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
         generate_direction = np.zeros(num_sim, dtype=int)
         generate_speed = np.zeros(num_sim, dtype=int)
         src_idx = np.zeros(num_sim, dtype=int)
+        src_idx_dense = np.zeros(num_sim, dtype=int)
         brain_noise_norm = np.zeros([G.shape[0], ntpoints, num_sim])
 
         # first Nsim trials with waves
         for sim_n in range(0, num_sim):
             src_idx[sim_n] = np.random.randint(0, G.shape[1])
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, src_idx[sim_n], spherical=False)
+            dist = np.zeros(G_dense.shape[1])
+            for i in range(0, G_dense.shape[1]):
+                dist[i] = np.linalg.norm(vertices[src_idx[sim_n]]-vertices_dense[i])
+            ind_close = np.where(dist <= 0.002)[0]
+            src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]
+            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex_dense, params, G_dense, src_idx_dense[sim_n], spherical=False)
 
             generate_direction[sim_n] = np.random.randint(0, sensor_waves.shape[0])
             generate_speed[sim_n] = np.random.randint(0, sensor_waves.shape[1])
@@ -81,7 +94,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             # for d in range(0, path_final.shape[0]):
             #     ax.scatter(path_final[d, 10, :, 0], path_final[d, 10, :, 1], path_final[d, 10, :, 2], marker = '^')
 
-            brain_noise = generate_brain_noise(G)
+            brain_noise = generate_brain_noise(G_dense)
             brain_noise_norm[:, :, sim_n] = brain_noise[:, :sensor_waves.shape[3]]/np.linalg.norm(brain_noise[:, :sensor_waves.shape[3]])
             wave_picked = sensor_waves[generate_direction[sim_n], generate_speed[sim_n], :, :]
             wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)
@@ -89,6 +102,8 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
 
             # plt.figure()
             # plt.plot(data.T)
+            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G,
+                                                                               src_idx[sim_n], spherical=False)
             [score_fit[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
             # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
             speed_fit[k, sim_n] = (best_speed_ind == generate_speed[sim_n])
@@ -97,8 +112,9 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
 
         # next Nsim trials without waves
         for sim_n in range(num_sim, 2*num_sim):
-            idx = src_idx[sim_n-num_sim]
-            [sensor_blob, path_indices] = create_blob_on_sensors(cortex, params, G, idx)
+            idx_dense = src_idx_dense[sim_n-num_sim]
+            idx = src_idx[sim_n - num_sim]
+            [sensor_blob, path_indices] = create_blob_on_sensors(cortex_dense, params, G_dense, idx_dense)
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=0)
 
             brain_noise = brain_noise_norm[:, :, sim_n-num_sim]
