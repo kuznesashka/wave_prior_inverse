@@ -1,4 +1,4 @@
-def simulations(data_dir, channel_type, params, snr, num_sim = 100):
+def simulations(data_dir, channel_type, params, snr, num_sim=100):
     """Function to run Monte Carlo simulations
             Parameters
             ----------
@@ -30,8 +30,8 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
 
     G_raw = scipy.io.loadmat(data_dir+'/G.mat')
     cortex_raw = scipy.io.loadmat(data_dir+'/cortex.mat')
-    G_dense_raw = scipy.io.loadmat(data_dir+'/G_dense.mat')
-    cortex_dense_raw = scipy.io.loadmat(data_dir+'/cortex_dense.mat')
+    G_dense_raw = scipy.io.loadmat(data_dir+'/G_medium.mat')
+    cortex_dense_raw = scipy.io.loadmat(data_dir+'/cortex_medium.mat')
 
     if channel_type == 'mag':
         G = G_raw['G'][np.arange(2, 306, 3)]  # magnetometers
@@ -73,14 +73,14 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
         src_idx = np.zeros(num_sim, dtype=int)
         src_idx_dense = np.zeros(num_sim, dtype=int)
         brain_noise_norm = np.zeros([G.shape[0], ntpoints, num_sim])
+        best_intercept = np.zeros(2*num_sim)
 
         # first Nsim trials with waves
         for sim_n in range(0, num_sim):
             src_idx[sim_n] = np.random.randint(0, G.shape[1])
-            dist = np.zeros(G_dense.shape[1])
-            for i in range(0, G_dense.shape[1]):
-                dist[i] = np.linalg.norm(vertices[src_idx[sim_n]]-vertices_dense[i])
-            ind_close = np.where(dist <= 0.002)[0]
+
+            dist = np.sum(np.sqrt((np.repeat(vertices[src_idx[sim_n], np.newaxis], vertices_dense.shape[0], axis=0) - vertices_dense)**2), axis=1)
+            ind_close = np.where((dist > 0.002)&(dist <= 0.005))[0]
             src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex_dense, params, G_dense, src_idx_dense[sim_n], spherical=False)
 
@@ -104,7 +104,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             # plt.plot(data.T)
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G,
                                                                                src_idx[sim_n], spherical=False)
-            [score_fit[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
             # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
             speed_fit[k, sim_n] = (best_speed_ind == generate_speed[sim_n])
             direction_fit[k, sim_n] = (np.argmax(best_coefs) == generate_direction[sim_n])
@@ -115,7 +115,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             idx_dense = src_idx_dense[sim_n-num_sim]
             idx = src_idx[sim_n - num_sim]
             [sensor_blob, path_indices] = create_blob_on_sensors(cortex_dense, params, G_dense, idx_dense)
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=0)
+            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=False)
 
             brain_noise = brain_noise_norm[:, :, sim_n-num_sim]
             sensor_blob_norm = sensor_blob/np.linalg.norm(sensor_blob)
@@ -124,7 +124,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim = 100):
             # plt.figure()
             # plt.plot(data.T)
 
-            [score_fit[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
             # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
             print(sim_n)
 
