@@ -1,4 +1,4 @@
-def create_waves_on_sensors(cortex, params, G, start_point, spherical):
+def create_waves_on_sensors(cortex, params, G, start_point, spherical, max_step=100):
     """Function to compute the basis waves
         Parameters
         ----------
@@ -12,6 +12,8 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical):
             The wave starting vertex
         spherical : bool
             To add spherical wave or not
+        max_step : int
+            Maximal step for path
         Returns
         -------
         sensor_waves : waves [n_dir x n_speeds x n_chann x T]
@@ -26,12 +28,17 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical):
     Fs = params['Fs']
 
     vertices = cortex[0][1]
-    VertConn = cortex[0][3]
-    VertNormals = cortex[0][4]
+    flag = 0
+    p = 2
+    while flag == 0:
+        if cortex[0][p].shape == (G.shape[1], G.shape[1]):
+            flag = 1
+        p += 1
+    VertConn = cortex[0][p-1]
+    VertNormals = cortex[0][p]
 
     # Create matrix with template paths in different directions from the starting point
     neighbour_step_1 = VertConn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
-    max_step = 100
     num_dir = len(neighbour_step_1)  # number of propagation directions
     path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
     for n in range(0, num_dir):
