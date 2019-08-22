@@ -17,18 +17,18 @@ def LASSO_inverse_solve(data, waves):
     import numpy as np
     from sklearn.linear_model import ElasticNetCV
 
-    Ndir = waves.shape[0] # number of propagation directions
-    R = data.shape[1]-waves.shape[3] + 1 # number of sliding window shifts
-    S = waves.shape[1] # number of propagation speeds
+    Ndir = waves.shape[0]  # number of propagation directions
+    R = data.shape[1]-waves.shape[3] + 1  # number of sliding window shifts
+    S = waves.shape[1]  # number of propagation speeds
     Tw = waves.shape[3]
 
     regression = ElasticNetCV(l1_ratio=1, positive=True, cv=5, max_iter=100000) # elastic net regression
 
-    coefs = np.zeros([R, S, Ndir]) # regression coefficients
-    intercept = np.zeros([R,S]) # regression intercept
-    score = np.zeros([R, S]) # R-squared scores
-    nzdir = np.zeros([R, S]) # number of nonzero directions
-    y_pred = np.zeros([R, S, data.shape[0]*data.shape[1]]) # predicted spikes
+    coefs = np.zeros([R, S, Ndir])  # regression coefficients
+    intercept = np.zeros([R, S])  # regression intercept
+    score = np.zeros([R, S])  # R-squared scores
+    nzdir = np.zeros([R, S])  # number of nonzero directions
+    y_pred = np.zeros([R, S, data.shape[0]*data.shape[1]])  # predicted spikes
 
     for r in range(0, R):
         data_vec = data[:,r:(Tw+r)].flatten()
