@@ -25,7 +25,7 @@ def LASSO_inverse_solve(data, waves):
     regression = ElasticNetCV(l1_ratio=1, positive=True, cv=5, max_iter=100000) # elastic net regression
 
     coefs = np.zeros([R, S, Ndir]) # regression coefficients
-    # intercept = np.zeros([R,S]) # regression intercept
+    intercept = np.zeros([R,S]) # regression intercept
     score = np.zeros([R, S]) # R-squared scores
     nzdir = np.zeros([R, S]) # number of nonzero directions
     y_pred = np.zeros([R, S, data.shape[0]*data.shape[1]]) # predicted spikes
@@ -39,7 +39,7 @@ def LASSO_inverse_solve(data, waves):
                 wavesspeed_vec[d] = wavesspeed[d,:,:].flatten()
             regression.fit(wavesspeed_vec.T, data_vec)
             coefs[r, s, :] = regression.coef_
-            # intercept[r, s] = regression.intercept_
+            intercept[r, s] = regression.intercept_
             score[r, s] = regression.score(wavesspeed_vec.T, data_vec)
             y_pred[r, s, :] = regression.predict(wavesspeed_vec.T)
             nzdir[r, s] = np.sum(coefs[r, s, :] != 0)
@@ -59,6 +59,7 @@ def LASSO_inverse_solve(data, waves):
 
     score_sort_ind = (-score_s).argsort()
     best_speed_ind = score_sort_ind[0]
+    best_intercept = intercept[shifts_s[best_speed_ind], best_speed_ind]
     best_coefs = coefs[shifts_s[best_speed_ind], best_speed_ind]
     best_score = score_s[best_speed_ind] # R-squared value in optimum
     best_shift = shifts_s[best_speed_ind]
@@ -68,4 +69,4 @@ def LASSO_inverse_solve(data, waves):
     # plt.plot(y_pred[bestshifts[bestind], bestind, :])
     # plt.title(['R-squared = ', str(finalscore)])
 
-    return [best_score, best_coefs, best_shift, best_speed_ind]
+    return [best_score, best_intercept, best_coefs, best_shift, best_speed_ind]
