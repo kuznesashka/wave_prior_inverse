@@ -25,6 +25,7 @@ def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
     duration = params['duration']
     Fs = params['Fs']
 
+    vertices = cortex[0][1]
     flag = 0
     p = 2
     while flag == 0:
