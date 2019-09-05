@@ -119,7 +119,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
         for sim_n in range(num_sim, 2*num_sim):
             idx_dense = src_idx_dense[sim_n-num_sim]
             idx = src_idx[sim_n - num_sim]
-            [sensor_blob, path_indices] = create_blob_on_sensors(cortex_dense, params, G_dense, idx_dense)
+            [sensor_blob, path_indices] = create_blob_on_sensors(cortex_dense, params, G_dense, idx_dense, T)
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=False)
 
             brain_noise = brain_noise_norm[:, :, sim_n-num_sim]
@@ -133,12 +133,11 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
             print(sim_n)
 
-
         y_score = score_fit
         fpr, tpr, thresholds = metrics.roc_curve(y_true, y_score)
         auc[k] = metrics.roc_auc_score(y_true, y_score)
         plt.plot(fpr, tpr, lw=lw, label='ROC curve for SNR {0}, (area = {1:0.2f})'.format(snr_level, auc[k]))
-        k+=1
+        k += 1
 
     plt.title('Receiver operating characteristics for different SNR')
     plt.legend(loc="lower right")
@@ -151,10 +150,10 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
         speed_ratio[i] = sum(speed_fit[i])/num_sim*100
 
     plt.figure()
-    plt.subplot(2,1,1)
+    plt.subplot(2, 1, 1)
     plt.plot(snr, direction_ratio, 'o-')
     plt.title('Direction detection ratio')
-    plt.subplot(2,1,2)
+    plt.subplot(2, 1, 2)
     plt.plot(snr, speed_ratio, 'o-')
     plt.title('Speed detection ratio')
 
