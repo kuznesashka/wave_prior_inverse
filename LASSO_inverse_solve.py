@@ -22,7 +22,7 @@ def LASSO_inverse_solve(data, waves):
     S = waves.shape[1]  # number of propagation speeds
     Tw = waves.shape[3]
 
-    regression = ElasticNetCV(l1_ratio=1, positive=True, cv=5, max_iter=100000) # elastic net regression
+    regression = ElasticNetCV(l1_ratio=1, positive=True, cv=5, max_iter=100000, fit_intercept=False)
 
     coefs = np.zeros([R, S, Ndir])  # regression coefficients
     intercept = np.zeros([R, S])  # regression intercept
