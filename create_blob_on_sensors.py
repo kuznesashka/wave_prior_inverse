@@ -1,4 +1,4 @@
-def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
+def create_blob_on_sensors(cortex, params, G, start_point, T, max_step=20):
     """Function to create static blob
         Parameters
         ----------
@@ -10,6 +10,8 @@ def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
             Forward model matrix
         start_point : int
             The wave starting vertex
+        T : int
+            Recording duration
         max_step : int
             Number of vertices involved into the static activation
         Returns
@@ -21,7 +23,7 @@ def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
     import numpy as np
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D
-
+    # TODO: fix the duration thing
     duration = params['duration']
     Fs = params['Fs']
 
@@ -88,16 +90,16 @@ def create_blob_on_sensors(cortex, params, G, start_point, max_step=20):
     # plt.figure()
     # plt.plot(g[11, 1:11])
 
-    ntpoints = int(Fs*duration+1)
-    t = np.linspace(0, 4, ntpoints)
+    # ntpoints = int(Fs*duration+1)
+    t = np.linspace(0, 4, T)
     omega = np.pi / 2
     h = 0.5 * (1 + np.cos(omega * t))
     # plt.figure()
     # plt.plot(t, h)
 
-    sensor_blob = np.zeros([G.shape[0], ntpoints])
-    s = np.zeros([max_step, ntpoints])
-    for t in range(0, ntpoints):
+    sensor_blob = np.zeros([G.shape[0], T])
+    s = np.zeros([max_step, T])
+    for t in range(0, T):
         s[:, t] = np.flip(g[max_step+1, 1:max_step+1])*h[t]
 
     # plt.figure()
