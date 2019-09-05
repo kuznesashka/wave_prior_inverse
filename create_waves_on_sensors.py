@@ -1,4 +1,7 @@
-def create_waves_on_sensors(cortex, params, G, start_point, spherical, max_step=100):
+import numpy as np
+import matplotlib.pyplot as plt
+
+def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_step=100):
     """Function to compute the basis waves
         Parameters
         ----------
@@ -20,8 +23,6 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical, max_step=
         path_indices : indices of vertices in path [n_dir x max_step]
         path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
         """
-
-    import numpy as np
 
     speeds = params['speeds']
     duration = params['duration']
@@ -71,6 +72,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical, max_step=
 
     # for all directions compute distance to the following point
 
+    # TODO: delete loops here
     dist = np.zeros([num_dir, max_step-1])
     for d in range(0, num_dir):
         for i in range(0, max_step-1):
@@ -138,29 +140,37 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical, max_step=
                     v1 += 1
                     v2 += 1
 
-    wave = np.zeros([ntpoints, ntpoints])
-    t = np.arange(0, ntpoints)
-    n = np.arange(1, ntpoints+1)
-    for i in t:
-        wave[i, :] = (1 + np.cos(2 * np.pi * (n - i) / ntpoints))
+    # source timeseries
+    # TODO: replace loop
+    t = np.arange(0, ntpoints * 2 / 100, 1 / 100)
+    k = np.arange(0, ntpoints * 1 / 100, 1 / 100)
+    wave = np.zeros([ntpoints, len(t)])
+    for i in range(0, ntpoints):
+        wave[i] = np.sin(10 * np.pi * (t-k[i])) * np.exp(-10 * (2*(t-k[i]) + 0.2) ** 2)
+        wave[i, :i] = np.zeros(i)
 
+    # plt.figure()
+    # plt.plot(t, wave.T, 'k')
+    # plt.plot(t, wave[0], 'r', label='First source', lw=3)
+    # plt.xlabel('Time, ms')
+    # plt.ylabel('Amplitude, a.u.')
+
+    T = wave.shape[1]
     if spherical == 1:
-        sensor_waves = np.zeros([num_dir+1, len(speeds), G.shape[0], ntpoints])
+        sensor_waves = np.zeros([num_dir+1, len(speeds), G.shape[0], T])
     else:
-        sensor_waves = np.zeros([num_dir, len(speeds), G.shape[0], ntpoints])
+        sensor_waves = np.zeros([num_dir, len(speeds), G.shape[0], T])
     for s in range(0, len(speeds)):
         for i in range(0, num_dir):
-            for t in range(0, ntpoints):
-                fm_s = np.zeros([G.shape[0], ntpoints])
-                for k in range(0, ntpoints):
-                    fm_s[:, k] = forward_model[i, s, k, :]
-                A = fm_s @ wave[t].T
-                sensor_waves[i, s, :, t] = A.T
+            fm_s = np.zeros([G.shape[0], ntpoints])
+            for k in range(0, ntpoints):
+                fm_s[:, k] = forward_model[i, s, k, :]
+            A = fm_s @ wave
+            sensor_waves[i, s, :, :] = A
     if spherical == 1:
         for s in range(0, len(speeds)):
-            for t in range(0, ntpoints):
-                for i in range(0, num_dir):
-                    sensor_waves[num_dir, s, :, t] = sensor_waves[num_dir, s, :, t] + sensor_waves[i, s, :, t]
-                sensor_waves[num_dir, s, :, t] = sensor_waves[num_dir, s, :, t]/num_dir
+            for i in range(0, num_dir):
+                sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
+            sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :]/num_dir
 
     return [sensor_waves, path_indices, path_final]
