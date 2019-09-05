@@ -1,4 +1,4 @@
-def LASSO_inverse_solve(data, waves):
+def LASSO_inverse_solve(data, waves, fit_intercept):
     """Function to compute the inverse solution with LASSO with positive coefficients
     Parameters
     ----------
@@ -6,6 +6,8 @@ def LASSO_inverse_solve(data, waves):
         Input data for the inverse problem (N_channels x T)
     waves : numpy.ndarray
        Basis waves to fit (directions_number x number_of_speeds x channels_number x timepoints_number)
+    fit_intercept: bool
+        To add intercept or not
     Returns
     -------
     best_score : R-squared in optimum
@@ -22,7 +24,7 @@ def LASSO_inverse_solve(data, waves):
     S = waves.shape[1]  # number of propagation speeds
     Tw = waves.shape[3]
 
-    regression = ElasticNetCV(l1_ratio=1, positive=True, cv=5, max_iter=100000, fit_intercept=False)
+    regression = ElasticNetCV(l1_ratio=1, positive=True, cv=5, max_iter=100000, fit_intercept=fit_intercept)
 
     coefs = np.zeros([R, S, Ndir])  # regression coefficients
     intercept = np.zeros([R, S])  # regression intercept
