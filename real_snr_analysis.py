@@ -3,8 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 fname = '/home/ksasha/Projects/ASPIRE_project/MEG_data/B1C2/B1C2_ii_run1_raw_tsss_mc_art_corr.fif'  # path to MEG
-subjects_dir = '/home/ksasha/Projects/ASPIRE_project/MEG_data/B1C2/'  # The paths to Freesurfer reconstructions
-subject = 'B1C2'
 
 Data = mne.io.read_raw_fif(fname)  # upload the data
 tmin = 0
