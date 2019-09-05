@@ -109,7 +109,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
 
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G,
                                                                                src_idx[sim_n], spherical=False)
-            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves, True)
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves, False)
             # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
             speed_fit[k, sim_n] = (best_speed_ind == generate_speed[sim_n])
             direction_fit[k, sim_n] = (np.argmax(best_coefs) == generate_direction[sim_n])
@@ -129,7 +129,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             # plt.figure()
             # plt.plot(data.T)
 
-            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves, False)
             # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
             print(sim_n)
 
