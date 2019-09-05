@@ -48,7 +48,8 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     vertices = cortex[0][1]
     vertices_dense = cortex_dense[0][1]
 
-    ntpoints = int(params['duration']*params['Fs']+1)
+    # ntpoints = int(params['duration']*params['Fs']+1)
+    T = int(params['duration']*params['Fs']+1)*2
 
     y_true = np.zeros(num_sim*2)
     y_true[0:num_sim] = np.ones(num_sim)
@@ -72,7 +73,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
         generate_speed = np.zeros(num_sim, dtype=int)
         src_idx = np.zeros(num_sim, dtype=int)
         src_idx_dense = np.zeros(num_sim, dtype=int)
-        brain_noise_norm = np.zeros([G.shape[0], ntpoints, num_sim])
+        brain_noise_norm = np.zeros([G.shape[0], T, num_sim])
         best_intercept = np.zeros(2*num_sim)
 
         # first Nsim trials with waves
@@ -101,7 +102,11 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]
 
             # plt.figure()
+            # plt.plot(np.concatenate((brain_noise_norm[:, :, sim_n], wave_picked_norm), axis=1).T)
+
+            # plt.figure()
             # plt.plot(data.T)
+
             [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G,
                                                                                src_idx[sim_n], spherical=False)
             [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves)
