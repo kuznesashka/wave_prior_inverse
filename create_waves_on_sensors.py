@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+
 def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_step=100):
     """Function to compute the basis waves
         Parameters
@@ -21,10 +22,9 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
         Returns
         -------
         sensor_waves : waves [n_dir x n_speeds x n_chann x T]
-        direction : direction of propagation in space [n_dir x n_speeds x 3]
+        direction_final : direction of propagation in space [n_dir x n_speeds x 3]
         path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
         """
-
     speeds = params['speeds']
     duration = params['duration']
     Fs = params['Fs']
@@ -43,6 +43,13 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
     neighbour_step_1 = VertConn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
     num_dir = len(neighbour_step_1)  # number of propagation directions
     path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
+
+    ntpoints = int(Fs * duration) + 1  # number of time points to generate
+    path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
+    forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
+    direction_final = np.zeros([num_dir, len(speeds), 3])
+    tstep = 1 / Fs
+
     for n in range(0, num_dir):
         path_indices[n, 0] = start_point
         neighbour_ind = neighbour_step_1[n]
@@ -71,104 +78,93 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
             path_indices[n, d] = neighbour_ind
             d += 1
 
-    # for all directions compute distance to the following point
-    first = vertices[path_indices[:, :-1]]
-    next = vertices[path_indices[:, 1:]]
-    dist = np.sqrt(np.sum((next - first) ** 2, axis=2))
+        # compute distance to the following point
+        first = vertices[path_indices[n, :-1]]
+        next = vertices[path_indices[n, 1:]]
+        dist = np.sqrt(np.sum((next - first) ** 2, axis=1))
 
-    ntpoints = int(Fs * duration) + 1  # number of time points to generate
-    path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
-    forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
-    direction = np.zeros([num_dir, len(speeds), 3])
-    tstep = 1 / Fs
-
-    for s in range(0, len(speeds)):
-        l = speeds[s] * tstep
-        for d in range(0, num_dir):
-            path_final[d, s, 0, :] = vertices[start_point]
-            forward_model[d, s, 0, :] = G[:, start_point]
+        for s in range(0, len(speeds)):
+            l = speeds[s] * tstep
+            path_final[n, s, 0, :] = vertices[start_point]
+            forward_model[n, s, 0, :] = G[:, start_point]
             res = 0
             v1 = 0
             v2 = 1
             for t in range(1, ntpoints):
                 if l < res:
                     alpha = 1 - l / res
-                    path_final[d, s, t, :] = alpha * path_final[d, s, (t - 1), :] + (1 - alpha) * vertices[
-                        path_indices[d, v2]]
-                    forward_model[d, s, t, :] = alpha * forward_model[d, s, (t - 1), :] + (1 - alpha) * G[:,
+                    path_final[n, s, t, :] = alpha * path_final[n, s, (t - 1), :] + (1 - alpha) * vertices[
+                        path_indices[n, v2]]
+                    forward_model[n, s, t, :] = alpha * forward_model[n, s, (t - 1), :] + (1 - alpha) * G[:,
                                                                                                         path_indices[
-                                                                                                            d, v2]]
+                                                                                                            n, v2]]
                     res = res - l
                 elif l > res:
                     if res == 0:
-                        if l < dist[d, (v2 - 1)]:
-                            alpha = 1 - l / dist[d, (v2 - 1)]
-                            path_final[d, s, t, :] = alpha * vertices[path_indices[d, v1]] + (1 - alpha) * vertices[
-                                path_indices[d, v2]]
-                            forward_model[d, s, t, :] = alpha * G[:, path_indices[d, v1]] + (1 - alpha) * G[:,
+                        if l < dist[(v2 - 1)]:
+                            alpha = 1 - l / dist[(v2 - 1)]
+                            path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
+                                path_indices[n, v2]]
+                            forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
                                                                                                           path_indices[
-                                                                                                              d, v2]]
-                            res = dist[d, (v2 - 1)] - l
-                        elif l == dist[d, (v2 - 1)]:
-                            path_final[d, s, t, :] = vertices[path_indices[d, v2]]
-                            forward_model[d, s, t, :] = G[:, path_indices[d, v2]]
+                                                                                                              n, v2]]
+                            res = dist[(v2 - 1)] - l
+                        elif l == dist[(v2 - 1)]:
+                            path_final[n, s, t, :] = vertices[path_indices[n, v2]]
+                            forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                             v1 += 1
                             v2 += 1
                         else:
-                            l2 = l - dist[d, (v2 - 1)]
+                            l2 = l - dist[(v2 - 1)]
                             v1 += 1
                             v2 += 1
-                            while l2 > dist[d, (v2 - 1)]:
-                                l2 = l2 - dist[d, (v2 - 1)]
+                            while l2 > dist[(v2 - 1)]:
+                                l2 = l2 - dist[(v2 - 1)]
                                 v1 += 1
                                 v2 += 1
-                            alpha = 1 - l2 / dist[d, (v2 - 1)]
-                            path_final[d, s, t, :] = alpha * vertices[path_indices[d, v1]] + (1 - alpha) * vertices[
-                                path_indices[d, v2]]
-                            forward_model[d, s, t, :] = alpha * G[:, path_indices[d, v1]] + (1 - alpha) * G[:,
+                            alpha = 1 - l2 / dist[(v2 - 1)]
+                            path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
+                                path_indices[n, v2]]
+                            forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
                                                                                                           path_indices[
-                                                                                                              d, v2]]
-                            res = dist[d, (v2 - 1)] - l2
+                                                                                                              n, v2]]
+                            res = dist[(v2 - 1)] - l2
                     else:
                         l2 = l - res
                         v1 += 1
                         v2 += 1
-                        while l2 > dist[d, (v2 - 1)]:
-                            l2 = l2 - dist[d, (v2 - 1)]
+                        while l2 > dist[(v2 - 1)]:
+                            l2 = l2 - dist[(v2 - 1)]
                             v1 += 1
                             v2 += 1
-                        alpha = 1 - l2 / dist[d, (v2 - 1)]
-                        path_final[d, s, t, :] = alpha * vertices[path_indices[d, v1]] + (1 - alpha) * vertices[
-                            path_indices[d, v2]]
-                        forward_model[d, s, t, :] = alpha * G[:, path_indices[d, v1]] + (1 - alpha) * G[:, path_indices[
-                                                                                                               d, v2]]
-                        res = dist[d, (v2 - 1)] - l2
+                        alpha = 1 - l2 / dist[(v2 - 1)]
+                        path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
+                            path_indices[n, v2]]
+                        forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:, path_indices[
+                                                                                                               n, v2]]
+                        res = dist[(v2 - 1)] - l2
                 else:
-                    path_final[d, s, t, :] = vertices[path_indices[d, v2]]
-                    forward_model[d, s, t, :] = G[:, path_indices[d, v2]]
+                    path_final[n, s, t, :] = vertices[path_indices[n, v2]]
+                    forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                     v1 += 1
                     v2 += 1
 
-            direction[d, s, :] = path_final[d, s, -1, :] - path_final[d, s, 0, :]
+            direction_final[n, s, :] = path_final[n, s, -1, :] - path_final[n, s, 0, :]
 
-        # visualization
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111, projection='3d')
-        # ax.scatter(vertices[0:-1:100, 0], vertices[0:-1:100, 1], vertices[0:-1:100, 2])
-        # for d in range(0, path_final.shape[0]):
-        #     ax.scatter(path_final[d, s, :, 0], path_final[d, s, :, 1], path_final[d, s, :, 2], marker = '^')
+    # visualization
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(vertices[0:-1:100, 0], vertices[0:-1:100, 1], vertices[0:-1:100, 2])
+    # for d in range(0, path_final.shape[0]):
+    #     ax.scatter(path_final[d, s, :, 0], path_final[d, s, :, 1], path_final[d, s, :, 2], marker = '^')
 
-    # source timeseries
-    # TODO: replace loop
+    # source time series
     t = np.arange(0, ntpoints * 2 / 100, 1 / 100)
     k = np.arange(0, ntpoints * 1 / 100, 1 / 100)
-    wave = np.zeros([ntpoints, len(t)])
+    p = np.tile(t, (len(k), 1))-np.tile(k.T, (len(t), 1)).T
+    wave = np.sin(10 * np.pi * p) * np.exp(-10 * (2 * p + 0.2) ** 2)
     for i in range(0, ntpoints):
-        wave[i] = np.sin(10 * np.pi * (t - k[i])) * np.exp(-10 * (2 * (t - k[i]) + 0.2) ** 2)
         wave[i, :i] = np.zeros(i)
-
-    # l = np.tile(t, (len(k), 1))-np.tile(k.T, (len(t), 1)).T
-    # wave = np.sin(10 * np.pi * l) * np.exp(-10 * (2 * l + 0.2) ** 2)
 
     # plt.figure()
     # plt.plot(t, wave.T, 'k')
@@ -194,4 +190,4 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
                 sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
             sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] / num_dir
 
-    return [sensor_waves, direction, path_final]
+    return [sensor_waves, direction_final, path_final]
