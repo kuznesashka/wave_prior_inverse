@@ -1,3 +1,12 @@
+from create_blob_on_sensors import create_blob_on_sensors
+from create_waves_on_sensors import create_waves_on_sensors
+from generate_brain_noise import generate_brain_noise
+from LASSO_inverse_solve import LASSO_inverse_solve
+import scipy.io
+import numpy as np
+from sklearn import metrics
+import matplotlib.pyplot as plt
+
 def simulations(data_dir, channel_type, params, snr, num_sim=100):
     """Function to run Monte Carlo simulations
             Parameters
@@ -15,24 +24,18 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             Returns
             -------
             auc : AUC values for all snr levels
-            ROC curve plot
+            speed_error : difference between simulated and detected speeds in m/s
+            direction_error : 1-correlation between generated and detected directions
+            ROC curve plot, Error plots
             """
 
-    from create_blob_on_sensors import create_blob_on_sensors
-    from create_waves_on_sensors import create_waves_on_sensors
-    from generate_brain_noise import generate_brain_noise
-    from LASSO_inverse_solve import LASSO_inverse_solve
-    import scipy.io
-    import numpy as np
-    from sklearn import metrics
-    import matplotlib.pyplot as plt
-    # from mpl_toolkits.mplot3d import Axes3D
-
+    # uploading sparse and dense forward model and cortical model
     G_raw = scipy.io.loadmat(data_dir+'/G.mat')
     cortex_raw = scipy.io.loadmat(data_dir+'/cortex.mat')
     G_dense_raw = scipy.io.loadmat(data_dir+'/G_medium.mat')
     cortex_dense_raw = scipy.io.loadmat(data_dir+'/cortex_medium.mat')
 
+    # pick the appropriate channels
     if channel_type == 'mag':
         G = G_raw['G'][np.arange(2, 306, 3)]  # magnetometers
         G_dense = G_dense_raw['G'][np.arange(2, 306, 3)]  # magnetometers
@@ -44,18 +47,17 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
 
     cortex = cortex_raw['cortex'][0]
     cortex_dense = cortex_dense_raw['cortex'][0]
-
     vertices = cortex[0][1]
     vertices_dense = cortex_dense[0][1]
 
-    # ntpoints = int(params['duration']*params['Fs']+1)
-    T = int(params['duration']*params['Fs']+1)*2
+    speeds = params['speeds']  # speed range
+    T = int(params['duration']*params['Fs']+1)*2  # duration in time
 
-    y_true = np.zeros(num_sim*2)
+    y_true = np.zeros(num_sim*2)  # true labels
     y_true[0:num_sim] = np.ones(num_sim)
     auc = np.zeros(len(snr))
-    k = 0
 
+    # ROC figure
     plt.figure()
     lw = 2
     plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
@@ -64,63 +66,69 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
 
-    speed_fit = np.zeros([len(snr), num_sim], dtype=int)
-    direction_fit = np.zeros([len(snr), num_sim], dtype=int)
+    speed_error = np.zeros([len(snr), num_sim])  # error in speed detection
+    direction_error = np.zeros([len(snr), num_sim])  # error in direction detection
+
+    k = 0
     for snr_level in snr:
-        # wave_fit = np.zeros(2*Num_sim, dtype=int)
-        score_fit = np.zeros(2*num_sim)
-        generate_direction = np.zeros(num_sim, dtype=int)
-        generate_speed = np.zeros(num_sim, dtype=int)
-        src_idx = np.zeros(num_sim, dtype=int)
-        src_idx_dense = np.zeros(num_sim, dtype=int)
-        brain_noise_norm = np.zeros([G.shape[0], T, num_sim])
-        best_intercept = np.zeros(2*num_sim)
+        score_fit = np.zeros(2*num_sim)  # R-squared metrics for all simulations
+        generate_direction = np.zeros([num_sim, 3])  # true directions modeled
+        generate_speed = np.zeros(num_sim, dtype=int)  # speed modeled
+        src_idx = np.zeros(num_sim, dtype=int)  # assumed starting source from the sparse model
+        src_idx_dense = np.zeros(num_sim, dtype=int)  # true starting source from the dense model
+        brain_noise_norm = np.zeros([G.shape[0], T, num_sim])  # brain noise array
+        best_intercept = np.zeros(2*num_sim)  # best intercepts for LASSO with intercept
 
-        # first Nsim trials with waves
+        # in first num_sim trials the data is generated using traveling waves
         for sim_n in range(0, num_sim):
-            src_idx[sim_n] = np.random.randint(0, G.shape[1])
-
-            dist = np.sum(np.sqrt((np.repeat(vertices[src_idx[sim_n], np.newaxis], vertices_dense.shape[0], axis=0) - vertices_dense)**2), axis=1)
+            src_idx[sim_n] = np.random.randint(0, G.shape[1])  # random starting source from sparse cortical model
+            # compute distance from starting source to all sources from dense cortical model
+            dist = np.sum(np.sqrt((np.repeat(vertices[src_idx[sim_n], np.newaxis],
+                                             vertices_dense.shape[0], axis=0) - vertices_dense)**2), axis=1)
+            # find close sources
             ind_close = np.where((dist > 0.002)&(dist <= 0.005))[0]
-            src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex_dense, params, G_dense, src_idx_dense[sim_n], spherical=False)
+            src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]  # pick randomly new starting source
+            [sensor_waves, direction, path_final] = create_waves_on_sensors(cortex_dense, params,
+                                                                            G_dense, src_idx_dense[sim_n], spherical=False)
+            generate_speed[sim_n] = np.random.randint(0, sensor_waves.shape[1])  # speed for wave simulation
+            direction_ind = np.random.randint(0, sensor_waves.shape[0])
+            generate_direction[sim_n, :] = direction[direction_ind, generate_speed[sim_n], :]  # direction for wave simulation
 
-            generate_direction[sim_n] = np.random.randint(0, sensor_waves.shape[0])
-            generate_speed[sim_n] = np.random.randint(0, sensor_waves.shape[1])
+            brain_noise = generate_brain_noise(G_dense)  # generate brain noise based on dense matrix
+            brain_noise_norm[:, :, sim_n] = brain_noise[:, :sensor_waves.shape[3]]/\
+                                            np.linalg.norm(brain_noise[:, :sensor_waves.shape[3]])  # normalized
+            wave_picked = sensor_waves[direction_ind, generate_speed[sim_n], :, :]
+            wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)  # normalized wave
+            data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]  # wave + noise
 
             # visualization
-            # fig = plt.figure()
-            # ax = fig.add_subplot(111, projection='3d')
-            # ax.scatter(vertices[:,0], vertices[:,1], vertices[:,2])
-            # for d in range(0, path_final.shape[0]):
-            #     ax.scatter(path_final[d, 10, :, 0], path_final[d, 10, :, 1], path_final[d, 10, :, 2], marker = '^')
-
-            brain_noise = generate_brain_noise(G_dense)
-            brain_noise_norm[:, :, sim_n] = brain_noise[:, :sensor_waves.shape[3]]/np.linalg.norm(brain_noise[:, :sensor_waves.shape[3]])
-            wave_picked = sensor_waves[generate_direction[sim_n], generate_speed[sim_n], :, :]
-            wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)
-            data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]
-
             # plt.figure()
             # plt.plot(np.concatenate((brain_noise_norm[:, :, sim_n], wave_picked_norm), axis=1).T)
-
             # plt.figure()
             # plt.plot(data.T)
 
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G,
+            # Generate basis waves using sparse cortical model starting from the initially picked point
+            # (with spatial error)
+            [sensor_waves, direction, path_final] = create_waves_on_sensors(cortex, params, G,
                                                                                src_idx[sim_n], spherical=False)
-            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves, False)
-            # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
-            speed_fit[k, sim_n] = (best_speed_ind == generate_speed[sim_n])
-            direction_fit[k, sim_n] = (np.argmax(best_coefs) == generate_direction[sim_n])
+            # Solve the LASSO problem without intercept
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = \
+                LASSO_inverse_solve(data, sensor_waves, False)
+            # error in speed predicted (m/s)
+            speed_error[k, sim_n] = np.abs(speeds[best_speed_ind] - speeds[generate_speed[sim_n]])
+            # error in direction predicted (out of 1)
+            direction_error[k, sim_n] = 1 - direction[np.argmax(best_coefs), best_speed_ind, :] @ \
+                                        generate_direction[sim_n, :] / \
+                                        np.linalg.norm(direction[np.argmax(best_coefs), best_speed_ind, :]) / \
+                                        np.linalg.norm(generate_direction[sim_n, :])
             print(sim_n)
 
-        # next Nsim trials without waves
+        # next num_sim trials without waves, only with static oscillating blobs
         for sim_n in range(num_sim, 2*num_sim):
-            idx_dense = src_idx_dense[sim_n-num_sim]
+            idx_dense = src_idx_dense[sim_n - num_sim]
             idx = src_idx[sim_n - num_sim]
             [sensor_blob, path_indices] = create_blob_on_sensors(cortex_dense, params, G_dense, idx_dense, T)
-            [sensor_waves, path_indices, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=False)
+            [sensor_waves, direction, path_final] = create_waves_on_sensors(cortex, params, G, idx, spherical=False)
 
             brain_noise = brain_noise_norm[:, :, sim_n-num_sim]
             sensor_blob_norm = sensor_blob/np.linalg.norm(sensor_blob)
@@ -129,8 +137,8 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             # plt.figure()
             # plt.plot(data.T)
 
-            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = LASSO_inverse_solve(data, sensor_waves, False)
-            # wave_fit[sim_n] = (score_fit[sim_n] > 0.7)
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = \
+                LASSO_inverse_solve(data, sensor_waves, False)
             print(sim_n)
 
         y_score = score_fit
@@ -143,19 +151,18 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     plt.legend(loc="lower right")
     plt.show()
 
-    direction_ratio = np.zeros(len(snr))
-    speed_ratio = np.zeros(len(snr))
-    for i in range(0, len(snr)):
-        direction_ratio[i] = sum(direction_fit[i])/num_sim*100
-        speed_ratio[i] = sum(speed_fit[i])/num_sim*100
-
     plt.figure()
     plt.subplot(2, 1, 1)
-    plt.plot(snr, direction_ratio, 'o-')
-    plt.title('Direction detection ratio')
+    plt.plot(snr, np.mean(direction_error, axis=1), 'o-')
+    plt.title('Direction detection error')
+    plt.ylim([0, 1])
+    plt.xlabel('SNR')
+    plt.ylabel('1 - correlation between generated and detected')
     plt.subplot(2, 1, 2)
-    plt.plot(snr, speed_ratio, 'o-')
-    plt.title('Speed detection ratio')
+    plt.plot(snr, np.mean(speed_error, axis=1), 'o-')
+    plt.title('Speed detection error')
+    plt.xlabel('SNR')
+    plt.ylabel('Error between detected and generated speeds in m/s')
 
-    return auc
+    return auc, speed_error, direction_error
 
