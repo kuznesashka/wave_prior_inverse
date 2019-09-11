@@ -7,6 +7,7 @@ import numpy as np
 from sklearn import metrics
 import matplotlib.pyplot as plt
 
+
 def simulations(data_dir, channel_type, params, snr, num_sim=100):
     """Function to run Monte Carlo simulations
             Parameters
@@ -165,4 +166,3 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     plt.ylabel('Error between detected and generated speeds in m/s')
 
     return auc, speed_error, direction_error
-
