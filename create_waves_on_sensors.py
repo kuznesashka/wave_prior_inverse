@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.mplot3d import Axes3D
 
 def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_step=100):
     """Function to compute the basis waves
@@ -21,7 +21,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
         Returns
         -------
         sensor_waves : waves [n_dir x n_speeds x n_chann x T]
-        path_indices : indices of vertices in path [n_dir x max_step]
+        direction : direction of propagation in space [n_dir x n_speeds x 3]
         path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
         """
 
@@ -79,6 +79,7 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
     ntpoints = int(Fs * duration) + 1  # number of time points to generate
     path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
     forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
+    direction = np.zeros([num_dir, len(speeds), 3])
     tstep = 1 / Fs
 
     for s in range(0, len(speeds)):
@@ -148,6 +149,15 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
                     v1 += 1
                     v2 += 1
 
+            direction[d, s, :] = path_final[d, s, -1, :] - path_final[d, s, 0, :]
+
+        # visualization
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(vertices[0:-1:100, 0], vertices[0:-1:100, 1], vertices[0:-1:100, 2])
+        # for d in range(0, path_final.shape[0]):
+        #     ax.scatter(path_final[d, s, :, 0], path_final[d, s, :, 1], path_final[d, s, :, 2], marker = '^')
+
     # source timeseries
     # TODO: replace loop
     t = np.arange(0, ntpoints * 2 / 100, 1 / 100)
@@ -184,4 +194,4 @@ def create_waves_on_sensors(cortex, params, G, start_point, spherical=0, max_ste
                 sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
             sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] / num_dir
 
-    return [sensor_waves, path_indices, path_final]
+    return [sensor_waves, direction, path_final]
