@@ -30,8 +30,11 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
 
     if start_point <= fwd['src'][0]['nuse']:
         hemi_idx = 0
+        G = fwd['sol']['data'][:, 0:fwd['src'][0]['nuse']]
     else:
         hemi_idx = 1
+        G = fwd['sol']['data'][:, fwd['src'][0]['nuse']:-1]
+        start_point = start_point - fwd['src'][0]['nuse'] - 1
 
     vert_idx = fwd['src'][hemi_idx]['vertno']
     vertices = fwd['src'][hemi_idx]['rr'][vert_idx, :]
