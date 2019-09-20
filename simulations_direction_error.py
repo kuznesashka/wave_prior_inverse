@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import mne
 
 
-def simulations_detection_error(channel_type, params, snr, num_sim=100):
+def simulations_direction_error(channel_type, params, snr, num_sim=100):
     """Function to run Monte Carlo simulations
             Parameters
             ----------
@@ -124,12 +124,20 @@ def simulations_detection_error(channel_type, params, snr, num_sim=100):
     plt.ylim([0, 1])
     plt.ylabel('Error between detected and generated speeds in m/s')
 
-    jitter = 0.1*np.random.rand(speed_estimated.shape[1])
 
-    plt.scatter(speed_generated+jitter, speed_estimated+jitter)
-    plt.xlabel('True speed index')
-    plt.ylabel('Estimated speed index')
-    plt.plot(np.arange(0, 9, 0.1), np.arange(0, 9, 0.1), '--')
+    jitter_1 = 0.2*np.random.rand(speed_estimated.shape[1])
+    jitter_2 = 0.2* np.random.rand(speed_estimated.shape[1])
+    for s in range(0, speed_generated.shape[0]):
+        plt.subplot(1, speed_generated.shape[0], (s+1))
+        plt.scatter(speed_generated[s, :]+jitter_1, speed_estimated[s, :]+jitter_2)
+        plt.xlabel('True speed, m/s')
+        plt.ylabel('Estimated speed, m/s')
+        plt.plot(np.arange(-1, 10, 0.1), np.arange(-1, 10, 0.1), '--')
+        plt.xlim([-1, 10])
+        plt.ylim([-1, 10])
+        plt.title(('SNR level {0}').format(snr[s]))
+        plt.xticks(range(0, 10), params['speeds'])  # Set locations and labels
+        plt.yticks(range(0, 10), params['speeds'])  # Set locations and labels
 
     return
 
