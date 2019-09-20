@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=100):
+def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical=False, max_step=200):
     """Function to compute the basis waves
         Parameters
         ----------
@@ -12,6 +12,8 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
             Forward instance from the MNE Python
         params : dict
             Wave parameters
+        channel_type : str
+            Channels to pick
         start_point : int
             The wave starting vertex
         spherical : bool
@@ -26,7 +28,7 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
         """
     speeds = params['speeds']
     duration = params['duration']
-    Fs = params['Fs']
+    fs = params['Fs']
 
     if start_point <= fwd['src'][0]['nuse']:
         hemi_idx = 0
@@ -36,23 +38,30 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
         G = fwd['sol']['data'][:, fwd['src'][0]['nuse']:-1]
         start_point = start_point - fwd['src'][0]['nuse'] - 1
 
+    if channel_type == 'mag':
+        G = G[np.arange(2, 306, 3), :]  # magnetometers
+    elif channel_type == 'grad':
+        G = G[np.setdiff1d(range(0, 306), np.arange(2, 306, 3)), :]  # gradiometers
+    else:
+        print('Wrong channel name')
+
     vert_idx = fwd['src'][hemi_idx]['vertno']
     vertices = fwd['src'][hemi_idx]['rr'][vert_idx, :]
 
-    trimesh_global = fwd['src'][hemi_idx]['use_tris']
+    trimesh_global = fwd['src'][hemi_idx]['use_tris']  # all triads in the initial dense grid
     trimesh = np.zeros_like(trimesh_global)
-    for key, val in zip(vert_idx, np.arange(0, vert_idx.shape[0])):
+    for key, val in zip(vert_idx, np.arange(0, vert_idx.shape[0])):  # mapping between global and picked indices
         trimesh[trimesh_global == key] = val
 
-    VertConn = tris_to_adjacency(trimesh, vertices.shape[0])
-    VertNormals = fwd['src'][hemi_idx]['nn'][vert_idx, :]
+    vert_conn = tris_to_adjacency(trimesh, vertices.shape[0])
+    vert_normals = fwd['src'][hemi_idx]['nn'][vert_idx, :]
 
     # Create matrix with template paths in different directions from the starting point
-    neighbour_step_1 = VertConn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
+    neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
     num_dir = len(neighbour_step_1)  # number of propagation directions
     path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
 
-    ntpoints = int(Fs * duration) + 1  # number of time points to generate
+    ntpoints = int(fs * duration) + 1  # number of time points to generate
     path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
     path_sphere_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
     forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
@@ -60,28 +69,28 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
     direction_pca = np.zeros([num_dir, len(speeds), 3])
     direction_on_sphere = np.zeros([num_dir, len(speeds), 3])
     projected_path = np.zeros([num_dir, len(speeds), ntpoints, 2])
-    tstep = 1 / Fs
+    tstep = 1 / fs
 
     for n in range(0, num_dir):
         path_indices[n, 0] = start_point
         neighbour_ind = neighbour_step_1[n]
         path_indices[n, 1] = neighbour_ind
 
-        norm_start = np.mean(VertNormals[neighbour_step_1], axis=0)  # average normal to all of the nearest neighbours
+        norm_start = np.mean(vert_normals[neighbour_step_1], axis=0)  # average normal to all of the nearest neighbours
         norm_start = norm_start[:, np.newaxis]
         norm_start = norm_start / np.linalg.norm(norm_start)
-        P_norm = np.identity(3) - norm_start @ norm_start.T  # projection away from average normal
+        p_norm = np.identity(3) - norm_start @ norm_start.T  # projection away from average normal
 
         direction_0 = vertices[neighbour_ind] - vertices[start_point]
-        direction_0 = direction_0 @ P_norm.T
+        direction_0 = direction_0 @ p_norm.T
         direction_0 = direction_0 / np.linalg.norm(direction_0)
         d = 2
         while d <= max_step - 1:
-            neighbour_step_2 = VertConn[neighbour_ind, :].nonzero()[1]
+            neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
             cs = np.zeros(len(neighbour_step_2))
             for p in range(0, len(neighbour_step_2)):
                 direction = vertices[neighbour_step_2[p]] - vertices[neighbour_ind]
-                direction = direction @ P_norm.T
+                direction = direction @ p_norm.T
                 direction = direction / np.linalg.norm(direction)
                 cs[p] = direction @ direction_0.T
 
@@ -98,7 +107,7 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
         for s in range(0, len(speeds)):
             l = speeds[s] * tstep
             path_final[n, s, 0, :] = vertices[start_point]
-            path_sphere_final[n, s, 0, :] = VertNormals[start_point]
+            path_sphere_final[n, s, 0, :] = vert_normals[start_point]
             forward_model[n, s, 0, :] = G[:, start_point]
             res = 0
             v1 = 0
@@ -108,7 +117,7 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
                     alpha = 1 - l / res
                     path_final[n, s, t, :] = alpha * path_final[n, s, (t - 1), :] + (1 - alpha) * vertices[
                         path_indices[n, v2]]
-                    path_sphere_final[n, s, t, :] = alpha * path_sphere_final[n, s, (t - 1), :] + (1 - alpha) * VertNormals[
+                    path_sphere_final[n, s, t, :] = alpha * path_sphere_final[n, s, (t - 1), :] + (1 - alpha) * vert_normals[
                         path_indices[n, v2]]
                     forward_model[n, s, t, :] = alpha * forward_model[n, s, (t - 1), :] + (1 - alpha) * G[:,
                                                                                                         path_indices[
@@ -120,7 +129,7 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
                             alpha = 1 - l / dist[(v2 - 1)]
                             path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
                                 path_indices[n, v2]]
-                            path_sphere_final[n, s, t, :] = alpha * VertNormals[path_indices[n, v1]] + (1 - alpha) * VertNormals[
+                            path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
                                 path_indices[n, v2]]
                             forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
                                                                                                           path_indices[
@@ -128,7 +137,7 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
                             res = dist[(v2 - 1)] - l
                         elif l == dist[(v2 - 1)]:
                             path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                            path_sphere_final[n, s, t, :] = VertNormals[path_indices[n, v2]]
+                            path_sphere_final[n, s, t, :] = vert_normals[path_indices[n, v2]]
                             forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                             v1 += 1
                             v2 += 1
@@ -143,7 +152,7 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
                             alpha = 1 - l2 / dist[(v2 - 1)]
                             path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
                                 path_indices[n, v2]]
-                            path_sphere_final[n, s, t, :] = alpha * VertNormals[path_indices[n, v1]] + (1 - alpha) * VertNormals[
+                            path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
                                 path_indices[n, v2]]
                             forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
                                                                                                           path_indices[
@@ -160,14 +169,14 @@ def create_waves_on_sensors(fwd, params, start_point, spherical=False, max_step=
                         alpha = 1 - l2 / dist[(v2 - 1)]
                         path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
                             path_indices[n, v2]]
-                        path_sphere_final[n, s, t, :] = alpha * VertNormals[path_indices[n, v1]] + (1 - alpha) * VertNormals[
+                        path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
                             path_indices[n, v2]]
                         forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:, path_indices[
                                                                                                                n, v2]]
                         res = dist[(v2 - 1)] - l2
                 else:
                     path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                    path_sphere_final[n, s, t, :] = VertNormals[path_indices[n, v2]]
+                    path_sphere_final[n, s, t, :] = vert_normals[path_indices[n, v2]]
                     forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                     v1 += 1
                     v2 += 1
