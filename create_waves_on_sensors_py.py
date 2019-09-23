@@ -1,10 +1,12 @@
 import numpy as np
 from tris_to_adjacency import tris_to_adjacency
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 from mpl_toolkits.mplot3d import Axes3D
+from mayavi.mlab import *
 
 
-def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical=False, max_step=200):
+def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical=False, max_step=100):
     """Function to compute the basis waves
         Parameters
         ----------
@@ -26,18 +28,22 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
         direction_final : direction of propagation in space [n_dir x n_speeds x 3]
         path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
         """
-    speeds = params['speeds']
-    duration = params['duration']
-    fs = params['Fs']
+    # Wave parameters
+    speeds = params['speeds']  # propagation speeds
+    duration = params['duration']  # half wave duration
+    fs = params['Fs']  # sampling frequency
 
-    if start_point <= fwd['src'][0]['nuse']:
-        hemi_idx = 0
-        G = fwd['sol']['data'][:, 0:fwd['src'][0]['nuse']]
+    # Focus on one hemisphere for simplicity
+    vert_left = fwd['src'][0]['nuse'] # number of vertices in left hemi
+    if start_point <= vert_left:
+        hemi_idx = 0  # left hemi
+        G = fwd['sol']['data'][:, 0:vert_left]
     else:
-        hemi_idx = 1
-        G = fwd['sol']['data'][:, fwd['src'][0]['nuse']:-1]
-        start_point = start_point - fwd['src'][0]['nuse'] - 1
+        hemi_idx = 1  # right hemi
+        G = fwd['sol']['data'][:, vert_left:-1]
+        start_point = start_point - vert_left - 1  # fix indexing
 
+    # pick grad or mag channels
     if channel_type == 'mag':
         G = G[np.arange(2, 306, 3), :]  # magnetometers
     elif channel_type == 'grad':
@@ -45,13 +51,19 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
     else:
         print('Wrong channel name')
 
-    vert_idx = fwd['src'][hemi_idx]['vertno']
-    vertices = fwd['src'][hemi_idx]['rr'][vert_idx, :]
+    vert_idx = fwd['src'][hemi_idx]['vertno']  # vertex indices picked from the dense grid
+    vertices = fwd['src'][hemi_idx]['rr'][vert_idx, :]  # vertex coordinates
 
-    trimesh_global = fwd['src'][hemi_idx]['use_tris']  # all triads in the initial dense grid
-    trimesh = np.zeros_like(trimesh_global)
-    for key, val in zip(vert_idx, np.arange(0, vert_idx.shape[0])):  # mapping between global and picked indices
-        trimesh[trimesh_global == key] = val
+    trimesh_all = fwd['src'][hemi_idx]['tris']
+    trimesh_global = fwd['src'][hemi_idx]['use_tris']  # used triangles (vertex indices in numeration from dense grid)
+    trimesh = np.tile(100000, [trimesh_global.shape[0], trimesh_global.shape[1]])
+    mapping = dict(zip(vert_idx, np.arange(0, vert_idx.shape[0])))
+    for i in range(0, len(vert_idx)):  # mapping between dense and sparse indices
+        val = mapping[vert_idx[i]]
+        trimesh[trimesh_global == vert_idx[i]] = val
+
+    triangular_mesh(vertices[:, 0], vertices[:, 1], vertices[:, 2], trimesh, color=(0, 1, 1))
+
 
     vert_conn = tris_to_adjacency(trimesh, vertices.shape[0])
     vert_normals = fwd['src'][hemi_idx]['nn'][vert_idx, :]
@@ -63,13 +75,18 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
 
     ntpoints = int(fs * duration) + 1  # number of time points to generate
     path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
-    path_sphere_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
+    # path_sphere_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
     forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
     direction_curved = np.zeros([num_dir, len(speeds), 3])
     direction_pca = np.zeros([num_dir, len(speeds), 3])
-    direction_on_sphere = np.zeros([num_dir, len(speeds), 3])
-    projected_path = np.zeros([num_dir, len(speeds), ntpoints, 2])
+    # direction_on_sphere = np.zeros([num_dir, len(speeds), 3])
+    # projected_path = np.zeros([num_dir, len(speeds), ntpoints, 2])
     tstep = 1 / fs
+
+    # dist_all = np.sum(np.sqrt((np.repeat(vertices[start_point, np.newaxis],
+    #                                          vertices.shape[0], axis=0) - vertices)**2), axis=1)
+    # ind_close = np.where(dist_all < 0.05)[0]
+    # trimesh_roi = trimesh[np.unique(np.array([np.where(trimesh == ind_close[s])[0][0] for s in range(0, len(ind_close))]))]
 
     for n in range(0, num_dir):
         path_indices[n, 0] = start_point
@@ -99,6 +116,14 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
             path_indices[n, d] = neighbour_ind
             d += 1
 
+        # Create the Triangulation
+        # fig = plt.figure()
+        # triang = mtri.Triangulation(vertices[:, 0], vertices[:, 1], trimesh_roi)
+        # # Plot the surface.
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.plot_trisurf(triang, vertices[:, 2], color=(0, 1, 1), alpha=0.5)
+        # plt.show()
+
         # compute distance to the following point (for all points in a path)
         first = vertices[path_indices[n, :-1]]
         next = vertices[path_indices[n, 1:]]
@@ -107,7 +132,7 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
         for s in range(0, len(speeds)):
             l = speeds[s] * tstep
             path_final[n, s, 0, :] = vertices[start_point]
-            path_sphere_final[n, s, 0, :] = vert_normals[start_point]
+            # path_sphere_final[n, s, 0, :] = vert_normals[start_point]
             forward_model[n, s, 0, :] = G[:, start_point]
             res = 0
             v1 = 0
@@ -117,8 +142,8 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
                     alpha = 1 - l / res
                     path_final[n, s, t, :] = alpha * path_final[n, s, (t - 1), :] + (1 - alpha) * vertices[
                         path_indices[n, v2]]
-                    path_sphere_final[n, s, t, :] = alpha * path_sphere_final[n, s, (t - 1), :] + (1 - alpha) * vert_normals[
-                        path_indices[n, v2]]
+                    # path_sphere_final[n, s, t, :] = alpha * path_sphere_final[n, s, (t - 1), :] + (1 - alpha) * vert_normals[
+                    #     path_indices[n, v2]]
                     forward_model[n, s, t, :] = alpha * forward_model[n, s, (t - 1), :] + (1 - alpha) * G[:,
                                                                                                         path_indices[
                                                                                                             n, v2]]
@@ -129,15 +154,15 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
                             alpha = 1 - l / dist[(v2 - 1)]
                             path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
                                 path_indices[n, v2]]
-                            path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
-                                path_indices[n, v2]]
+                            # path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
+                            #     path_indices[n, v2]]
                             forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
                                                                                                           path_indices[
                                                                                                               n, v2]]
                             res = dist[(v2 - 1)] - l
                         elif l == dist[(v2 - 1)]:
                             path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                            path_sphere_final[n, s, t, :] = vert_normals[path_indices[n, v2]]
+                            # path_sphere_final[n, s, t, :] = vert_normals[path_indices[n, v2]]
                             forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                             v1 += 1
                             v2 += 1
@@ -152,8 +177,8 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
                             alpha = 1 - l2 / dist[(v2 - 1)]
                             path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
                                 path_indices[n, v2]]
-                            path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
-                                path_indices[n, v2]]
+                            # path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
+                            #     path_indices[n, v2]]
                             forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
                                                                                                           path_indices[
                                                                                                               n, v2]]
@@ -169,26 +194,35 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
                         alpha = 1 - l2 / dist[(v2 - 1)]
                         path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
                             path_indices[n, v2]]
-                        path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
-                            path_indices[n, v2]]
+                        # path_sphere_final[n, s, t, :] = alpha * vert_normals[path_indices[n, v1]] + (1 - alpha) * vert_normals[
+                        #     path_indices[n, v2]]
                         forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:, path_indices[
                                                                                                                n, v2]]
                         res = dist[(v2 - 1)] - l2
                 else:
                     path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                    path_sphere_final[n, s, t, :] = vert_normals[path_indices[n, v2]]
+                    # path_sphere_final[n, s, t, :] = vert_normals[path_indices[n, v2]]
                     forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                     v1 += 1
                     v2 += 1
 
-            direction_on_sphere[n, s, :] = path_sphere_final[n, s, -1, :] - path_sphere_final[n, s, 0, :]
+            # direction_on_sphere[n, s, :] = path_sphere_final[n, s, -1, :] - path_sphere_final[n, s, 0, :]
             direction_curved[n, s, :] = path_final[n, s, -1, :] - path_final[n, s, 0, :]
 
             [u, ll, v] = np.linalg.svd(path_final[n, s, :, :])
             direction_pca[n, s, :] = u[:, 1].T@path_final[n, s, :, :]
 
-            [u, ll, v] = np.linalg.svd(path_sphere_final[n, s, :, :])
-            projected_path[n, s, :, :] = path_final[n, s, :, :]@v[:, 0:2]
+            # [u, ll, v] = np.linalg.svd(path_sphere_final[n, s, :, :])
+            # projected_path[n, s, :, :] = path_final[n, s, :, :]@v[:, 0:2]
+
+    triangular_mesh(vertices[:, 0], vertices[:, 1], vertices[:, 2], trimesh, color=(0, 1, 1))
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(vertices[0:-1:10, 0], vertices[0:-1:10, 1], vertices[0:-1:10, 2])
+    # for n in range(0, num_dir):
+    #     ax.scatter(vertices[path_indices[n, :], 0], vertices[path_indices[n, :], 1], vertices[path_indices[n, :], 2], s=100,
+    #             marker='^')
 
     # visualization for comparison of curved brain and spherical model
     # d = 0
@@ -235,4 +269,4 @@ def create_waves_on_sensors_py(fwd, params, channel_type, start_point, spherical
                 sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
             sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] / num_dir
 
-    return [sensor_waves, direction_curved, direction_pca, direction_on_sphere, projected_path]
+    return [sensor_waves, direction_curved, direction_pca] #, direction_on_sphere, projected_path]

@@ -39,7 +39,7 @@ def simulations_direction_error(channel_type, params, snr, num_sim=100):
     if channel_type == 'mag':
         G = G[np.arange(2, 306, 3), :]  # magnetometers
     elif channel_type == 'grad':
-        G = G[np.setdiff1d(range(0, 306), np.arange(2, 306, 3))]  # gradiometers
+        G = G[np.setdiff1d(range(0, 306), np.arange(2, 306, 3)), :]  # gradiometers
     else:
         print('Wrong channel name')
 

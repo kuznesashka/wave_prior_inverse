@@ -6,6 +6,7 @@ import scipy.io
 import numpy as np
 from sklearn import metrics
 import matplotlib.pyplot as plt
+from mayavi.mlab import *
 
 
 def simulations(data_dir, channel_type, params, snr, num_sim=100):
@@ -49,7 +50,11 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     cortex = cortex_raw['cortex'][0]
     cortex_dense = cortex_dense_raw['cortex'][0]
     vertices = cortex[0][1]
+    # faces = cortex[0][2]-1
     vertices_dense = cortex_dense[0][1]
+    # faces_dense = cortex_dense[0][2]
+
+    # triangular_mesh(vertices[:, 0], vertices[:, 1], vertices[:, 2], faces, color=(0, 1, 1))
 
     speeds = params['speeds']  # speed range
     T = int(params['duration']*params['Fs']+1)*2  # duration in time
@@ -67,14 +72,15 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
 
+    k = 0
+    generate_speed = np.zeros([len(snr), num_sim], dtype=int)  # speed modeled
     speed_error = np.zeros([len(snr), num_sim])  # error in speed detection
     direction_error = np.zeros([len(snr), num_sim])  # error in direction detection
+    best_speed_ind = np.zeros([len(snr), num_sim], dtype=int)  # error in direction detection
 
-    k = 0
     for snr_level in snr:
         score_fit = np.zeros(2*num_sim)  # R-squared metrics for all simulations
         generate_direction = np.zeros([num_sim, 3])  # true directions modeled
-        generate_speed = np.zeros(num_sim, dtype=int)  # speed modeled
         src_idx = np.zeros(num_sim, dtype=int)  # assumed starting source from the sparse model
         src_idx_dense = np.zeros(num_sim, dtype=int)  # true starting source from the dense model
         brain_noise_norm = np.zeros([G.shape[0], T, num_sim])  # brain noise array
@@ -91,18 +97,17 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]  # pick randomly new starting source
             [sensor_waves, direction, path_final] = create_waves_on_sensors(cortex_dense, params,
                                                                             G_dense, src_idx_dense[sim_n], spherical=False)
-            generate_speed[sim_n] = np.random.randint(0, sensor_waves.shape[1])  # speed for wave simulation
+            generate_speed[k, sim_n] = np.random.randint(0, sensor_waves.shape[1])  # speed for wave simulation
             direction_ind = np.random.randint(0, sensor_waves.shape[0])
-            generate_direction[sim_n, :] = direction[direction_ind, generate_speed[sim_n], :]  # direction for wave simulation
+            generate_direction[sim_n, :] = direction[direction_ind, generate_speed[k, sim_n], :]  # direction for wave simulation
 
             brain_noise = generate_brain_noise(G_dense)  # generate brain noise based on dense matrix
             brain_noise_norm[:, :, sim_n] = brain_noise[:, :sensor_waves.shape[3]]/\
                                             np.linalg.norm(brain_noise[:, :sensor_waves.shape[3]])  # normalized
-            wave_picked = sensor_waves[direction_ind, generate_speed[sim_n], :, :]
+            wave_picked = sensor_waves[direction_ind, generate_speed[k, sim_n], :, :]
             wave_picked_norm = wave_picked/np.linalg.norm(wave_picked)  # normalized wave
             data = snr_level*wave_picked_norm + brain_noise_norm[:, :, sim_n]  # wave + noise
 
-            # visualization
             # plt.figure()
             # plt.plot(np.concatenate((brain_noise_norm[:, :, sim_n], wave_picked_norm), axis=1).T)
             # plt.figure()
@@ -113,14 +118,14 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
             [sensor_waves, direction, path_final] = create_waves_on_sensors(cortex, params, G,
                                                                                src_idx[sim_n], spherical=False)
             # Solve the LASSO problem without intercept
-            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind] = \
+            [score_fit[sim_n], best_intercept[sim_n], best_coefs, best_shift, best_speed_ind[k, sim_n]] = \
                 LASSO_inverse_solve(data, sensor_waves, False)
             # error in speed predicted (m/s)
-            speed_error[k, sim_n] = np.abs(speeds[best_speed_ind] - speeds[generate_speed[sim_n]])
+            speed_error[k, sim_n] = np.abs(speeds[best_speed_ind[k, sim_n]] - speeds[generate_speed[k, sim_n]])
             # error in direction predicted (out of 1)
-            direction_error[k, sim_n] = 1 - direction[np.argmax(best_coefs), best_speed_ind, :] @ \
+            direction_error[k, sim_n] = 1 - direction[np.argmax(best_coefs), best_speed_ind[k, sim_n], :] @ \
                                         generate_direction[sim_n, :] / \
-                                        np.linalg.norm(direction[np.argmax(best_coefs), best_speed_ind, :]) / \
+                                        np.linalg.norm(direction[np.argmax(best_coefs), best_speed_ind[k, sim_n], :]) / \
                                         np.linalg.norm(generate_direction[sim_n, :])
             print(sim_n)
 
@@ -165,4 +170,16 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     plt.xlabel('SNR')
     plt.ylabel('Error between detected and generated speeds in m/s')
 
+    import pandas as pd
+    df = pd.DataFrame({'speed': generate_speed[0], 'error': speed_error[0]})
+    df['error'].hist(by=df['speed'], range = [0,1])
+
+    jitter = 0.1*np.random.rand(best_speed_ind.shape[1])
+
+    plt.scatter(generate_speed+jitter, best_speed_ind+jitter)
+    plt.xlabel('True speed index')
+    plt.ylabel('Estimated speed index')
+    plt.plot(np.arange(0,9,0.1), np.arange(0,9,0.1), '--')
+
     return auc, speed_error, direction_error
+
