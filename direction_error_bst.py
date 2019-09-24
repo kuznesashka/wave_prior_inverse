@@ -116,7 +116,7 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                 # dist_smooth = np.sum(np.sqrt((np.repeat(vertices_dense_smooth[src_idx_dense[sim_n], np.newaxis],
                 #                                  vertices_dense_smooth.shape[0], axis=0) - vertices_dense_smooth) ** 2), axis=1)
                 # find close sources
-                ind_close = np.where((dist > spatial_jitter[i])&(dist <= (spatial_jitter[i]+0.002)))[0]
+                ind_close = np.where((dist > spatial_jitter[i])&(dist <= (spatial_jitter[i]+0.003)))[0]
                 src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]  # pick randomly new starting source
                 [sensor_waves, path_final_gen, path_final_smooth_gen, direction, direction_smooth, direction_pca] = create_waves_on_sensors(cortex_dense, cortex_smooth_dense, params,
                                                                             G_dense, src_idx_dense[sim_n], spherical=False)
@@ -209,43 +209,52 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
             auc[i, j] = metrics.roc_auc_score(y_true, y_score)
             plt.plot(fpr, tpr, lw=lw, label='ROC curve for SNR {0}, (area = {1:0.2f})'.format(snr[j], auc[i, j]))
 
-        plt.title('Receiver operating characteristics for different SNR')
+        plt.title('Mean spatial jitter = ' + str((spatial_jitter[i] + 0.003/2)*1000) + ' mm')
         plt.legend(loc="lower right")
         plt.show()
 
     plt.figure()
     plt.subplot(1, 3, 1)
-    plt.plot(snr, np.mean(direction_error, axis=2), 'o-')
-    plt.title('Direction detection error (with curvature)')
-    plt.ylim([0, 1])
-    plt.xlabel('SNR')
-    plt.ylabel('1 - correlation between generated and detected')
+    for j in range(0, len(spatial_jitter)):
+        plt.plot(snr, np.mean(direction_error[j, :, :], axis=1), 'o-')
+        plt.title('Direction detection error (with curvature)')
+        plt.ylim([0, 1])
+        plt.xlabel('SNR')
+        plt.ylabel('1 - correlation between generated and detected')
+    plt.legend((np.array(spatial_jitter) + 0.0015)*1000)
     plt.subplot(1, 3, 2)
-    plt.plot(snr, np.mean(direction_error_smooth, axis=2), 'o-')
-    plt.title('Direction detection error (on smooth cortex)')
-    plt.ylim([0, 1])
-    plt.xlabel('SNR')
-    plt.ylabel('1 - correlation between generated and detected')
+    for j in range(0, len(spatial_jitter)):
+        plt.plot(snr, np.mean(direction_error_smooth[j, :, :], axis=1), 'o-')
+        plt.title('Direction detection error (on smooth cortex)')
+        plt.ylim([0, 1])
+        plt.xlabel('SNR')
+        plt.ylabel('1 - correlation between generated and detected')
+    plt.legend((np.array(spatial_jitter) + 0.0015)*1000)
     plt.subplot(1, 3, 3)
-    plt.plot(snr, np.mean(direction_error_pca, axis=2), 'o-')
-    plt.title('Direction detection error (main direction)')
-    plt.xlabel('SNR')
-    plt.ylim([0, 1])
-    plt.ylabel('Error between detected and generated speeds in m/s')
+    for j in range(0, len(spatial_jitter)):
+        plt.plot(snr, np.mean(direction_error_pca[j, :, :], axis=1), 'o-')
+        plt.title('Direction detection error (main direction)')
+        plt.xlabel('SNR')
+        plt.ylim([0, 1])
+        plt.ylabel('Error between detected and generated speeds in m/s')
+    plt.legend((np.array(spatial_jitter) + 0.0015)*1000)
 
+    plt.figure()
+    k = 1
     for j in range(0, len(spatial_jitter)):
         for s in range(0, speed_generated.shape[0]):
             jitter_1 = 0.2 * np.random.rand(speed_estimated.shape[2])
             jitter_2 = 0.2 * np.random.rand(speed_estimated.shape[2])
-            plt.subplot(len(spatial_jitter), len(snr), (j + s + 1))
-            plt.scatter(speed_generated[s, :] + jitter_1, speed_estimated[s, :] + jitter_2)
+            plt.subplot(len(spatial_jitter), len(snr), k)
+            plt.scatter(speed_generated[j, s, :] + jitter_1, speed_estimated[j, s, :] + jitter_2)
             plt.xlabel('True speed, m/s')
             plt.ylabel('Estimated speed, m/s')
             plt.plot(np.arange(-1, 10, 0.1), np.arange(-1, 10, 0.1), '--')
             plt.xlim([-1, 10])
             plt.ylim([-1, 10])
-            plt.title(('SNR level, spatial jitter').format((snr[s], spatial_jitter[j])))
             plt.xticks(range(0, 10), params['speeds'])  # Set locations and labels
             plt.yticks(range(0, 10), params['speeds'])  # Set locations and labels
+            plt.title('SNR level = ' + str(snr[s]) + ', Mean spatial jitter = ' + str((spatial_jitter[j]+0.0015)*1000) + ' mm')
+            k += 1
 
-    return
+    return auc, direction_error, direction_error_smooth, direction_error_pca, speed_generated, speed_estimated
