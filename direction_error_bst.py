@@ -2,6 +2,7 @@ from create_waves_on_sensors import create_waves_on_sensors
 from create_blob_on_sensors import create_blob_on_sensors
 from generate_brain_noise import generate_brain_noise
 from LASSO_inverse_solve import LASSO_inverse_solve
+from horn_method import horn_method
 import scipy.io
 import numpy as np
 from sklearn import metrics
@@ -37,9 +38,9 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
             """
     # 1. UPLOADING FORWARD OPERATOR AND CORTICAL MODEL FROM BST
     # uploading sparse and dense forward model and cortical model
-    G_dense_raw = scipy.io.loadmat(data_dir + '/G_medium.mat')
-    cortex_dense_raw = scipy.io.loadmat(data_dir + '/cortex_medium.mat')
-    cortex_smooth_dense_raw = scipy.io.loadmat(data_dir + '/cortex_smooth_medium.mat')
+    G_dense_raw = scipy.io.loadmat(data_dir + '/G_low.mat')
+    cortex_dense_raw = scipy.io.loadmat(data_dir + '/cortex_low.mat')
+    cortex_smooth_dense_raw = scipy.io.loadmat(data_dir + '/cortex_smooth_low.mat')
     G_raw = scipy.io.loadmat(data_dir + '/G.mat')
     cortex_raw = scipy.io.loadmat(data_dir + '/cortex.mat')
     cortex_smooth_raw = scipy.io.loadmat(data_dir + '/cortex_smooth.mat')
@@ -57,7 +58,7 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
     cortex_dense = cortex_dense_raw['cortex'][0]
     cortex = cortex_raw['cortex'][0]
     cortex_smooth = cortex_smooth_raw['cortex_smooth'][0]
-    cortex_smooth_dense = cortex_smooth_dense_raw['cortex'][0]
+    cortex_smooth_dense = cortex_smooth_dense_raw['cortex_smooth'][0]
 
     vertices = cortex[0][1]
     vertices_dense = cortex_dense[0][1]
@@ -72,7 +73,7 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
 
     # 2. PARAMETERS
     # TODO: fix duration
-    # speeds = params['speeds']  # speed range
+    speeds = params['speeds']  # speed range
     T = int(params['duration']*params['Fs']+1)*2  # duration in time
 
     speed_generated = np.zeros([len(spatial_jitter), len(snr), num_sim], dtype=int)
@@ -80,6 +81,7 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
     direction_error = np.zeros([len(spatial_jitter), len(snr), num_sim])
     direction_error_smooth = np.zeros([len(spatial_jitter), len(snr), num_sim])
     direction_error_pca = np.zeros([len(spatial_jitter), len(snr), num_sim])
+    spatial_error = np.zeros([len(spatial_jitter), len(snr), num_sim])
 
     # 3. ROC CURVE
     y_true = np.zeros(num_sim * 2)  # true labels
@@ -118,6 +120,7 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                 # find close sources
                 ind_close = np.where((dist > spatial_jitter[i])&(dist <= (spatial_jitter[i]+0.003)))[0]
                 src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]  # pick randomly new starting source
+                spatial_error[i, j, sim_n] = np.linalg.norm(vertices_dense[src_idx_dense[sim_n]] - vertices[src_idx[sim_n]])
                 [sensor_waves, path_final_gen, path_final_smooth_gen, direction, direction_smooth, direction_pca] = create_waves_on_sensors(cortex_dense, cortex_smooth_dense, params,
                                                                             G_dense, src_idx_dense[sim_n], spherical=False)
                 speed_generated[i, j, sim_n] = np.random.randint(0, sensor_waves.shape[1])  # speed for wave simulation
@@ -150,27 +153,36 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                 # Visualization of 3d brain surfaces
                 # triangular_mesh(vertices_dense[:, 0], vertices_dense[:, 1], vertices_dense[:, 2], faces_dense, color=(0, 1, 1))
 
-                # ind_close = np.where(dist_smooth <= 0.03)[0]
-                # fig = plt.figure()
-                # ax = fig.add_subplot(111, projection='3d')
-                # ax.scatter(vertices_dense_smooth[ind_close, 0], vertices_dense_smooth[ind_close, 1], vertices_dense_smooth[ind_close, 2])
-                # ax.scatter(path_final_smooth_gen[direction_ind, speed_generated[i, j, sim_n], :, 0],
-                #            path_final_smooth_gen[direction_ind, speed_generated[i, j, sim_n], :, 1],
-                #            path_final_smooth_gen[direction_ind, speed_generated[i, j, sim_n], :, 2], marker='^')
-                # ax.scatter(path_final_smooth[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 0],
-                #            path_final_smooth[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 1],
-                #            path_final_smooth[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 2], marker='^')
-                #
-                # ind_close = np.where(dist <= 0.03)[0]
-                # fig = plt.figure()
-                # ax = fig.add_subplot(111, projection='3d')
-                # ax.scatter(vertices_dense[ind_close, 0], vertices_dense[ind_close, 1], vertices_dense[ind_close, 2])
-                # ax.scatter(path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 0],
-                #            path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 1],
-                #            path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 2], marker='^')
-                # ax.scatter(path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 0],
-                #            path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 1],
-                #            path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 2], marker='^')
+               # PLOT FOR ONE SIMULATION VISUALIZATION
+               #  dist_av = np.mean(np.sum(np.sqrt((path_final_gen[direction_ind, speed_generated[i, j, sim_n], 1:-1,
+               #                          :] - path_final_gen[direction_ind, speed_generated[i, j, sim_n], 0:-2,
+               #                               :]) ** 2), axis=1))
+               #  fig = plt.figure()
+               #  for sp in range(0, len(speeds)):
+               #      ax = fig.add_subplot(5, 2, (sp+1), projection='3d')
+               #      # ax.scatter(vertices_dense[ind_close, 0], vertices_dense[ind_close, 1], vertices_dense[ind_close, 2])
+               #      ax.scatter(path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 0],
+               #                 path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 1],
+               #                 path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 2], color='r', marker='^')
+               #      for d in range(0, path_final.shape[0]):
+               #          ax.scatter(path_final[d, sp, :, 0],
+               #                     path_final[d, sp, :, 1],
+               #                     path_final[d, sp, :, 2], color='b', marker='^')
+               #          ax.view_init(180, 180)
+               #          plt.axis('off')
+               #      if (sp == speed_estimated[i, j, sim_n]):
+               #          ax.scatter(path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 0],
+               #                     path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 1],
+               #                     path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 2], color='g',  marker='^')
+               #          plt.title('BEST SOLUTION, propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
+               #              np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
+               #      elif (sp == speed_generated[i, j, sim_n]):
+               #          plt.title('TRUE SPEED, Propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
+               #              np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
+               #      else:
+               #          plt.title('Propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
+               #              np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
+
 
                 # error in direction predicted (out of 1)
                 direction_error[i, j, sim_n] = 1 - abs(direction[direction_ind_estimated, speed_estimated[i, j, sim_n], :] @ \
@@ -183,6 +195,19 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                 direction_error_pca[i, j, sim_n] = 1 - abs(direction_pca[direction_ind_estimated, speed_estimated[i, j, sim_n], :] @ \
                                                generate_direction_pca[sim_n, :] / np.linalg.norm(direction_pca[np.argmax(best_coefs), speed_estimated[i, j, sim_n], :]) / \
                                                np.linalg.norm(generate_direction_pca[sim_n, :]))
+                [R_curve, s_curve, t_curve] = horn_method(path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, :],
+                                                          path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, :])
+
+                # Visualization of Horn method
+                # q = path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, :]
+                # p = path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, :]
+                # qe = s_curve * R_curve @ p.T + np.tile(t_curve[:, np.newaxis], [1, 21])
+                #
+                # fig = plt.figure()
+                # ax = fig.add_subplot(111, projection='3d')
+                # ax.scatter(q[:, 0], q[:, 1], q[:, 2], color='r')
+                # ax.scatter(qe.T[:, 0], qe.T[:, 1], qe.T[:, 2], color='b')
+
                 print(i, j, sim_n)
 
             # next num_sim trials without waves, only with static oscillating blobs
