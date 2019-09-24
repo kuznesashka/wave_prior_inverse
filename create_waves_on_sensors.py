@@ -99,6 +99,7 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
         for s in range(0, len(speeds)):
             l = speeds[s] * tstep
             path_final[n, s, 0, :] = vertices[start_point]
+            path_final_smooth[n, s, 0, :] = vertices_smooth[start_point]
             forward_model[n, s, 0, :] = G[:, start_point]
             res = 0
             v1 = 0
@@ -207,4 +208,4 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
                 sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
             sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] / num_dir
 
-    return [sensor_waves, direction_final, direction_final_smooth, direction_pca]
+    return [sensor_waves, path_final, path_final_smooth, direction_final, direction_final_smooth, direction_pca]

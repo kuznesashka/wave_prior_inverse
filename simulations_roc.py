@@ -52,7 +52,7 @@ def simulations(data_dir, channel_type, params, snr, num_sim=100):
     vertices = cortex[0][1]
     # faces = cortex[0][2]-1
     vertices_dense = cortex_dense[0][1]
-    # faces_dense = cortex_dense[0][2]
+    # faces_dense = cortex_dense[0][0]-1
 
     # triangular_mesh(vertices[:, 0], vertices[:, 1], vertices[:, 2], faces, color=(0, 1, 1))
 
