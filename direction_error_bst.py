@@ -119,12 +119,29 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                 #                                  vertices_dense_smooth.shape[0], axis=0) - vertices_dense_smooth) ** 2), axis=1)
                 # find close sources
                 ind_close = np.where((dist > spatial_jitter[i])&(dist <= (spatial_jitter[i]+0.003)))[0]
+                if len(ind_close) == 0:
+                    continue
                 src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]  # pick randomly new starting source
                 spatial_error[i, j, sim_n] = np.linalg.norm(vertices_dense[src_idx_dense[sim_n]] - vertices[src_idx[sim_n]])
                 [sensor_waves, path_final_gen, path_final_smooth_gen, direction, direction_smooth, direction_pca] = create_waves_on_sensors(cortex_dense, cortex_smooth_dense, params,
                                                                             G_dense, src_idx_dense[sim_n], spherical=False)
+
+                # fig = plt.figure()
+                # for sp in range(0, len(speeds)):
+                #     ax = fig.add_subplot(5, 2, (sp+1), projection='3d')
+                #     for d in range(0, path_final_gen.shape[0]):
+                #         dist_av = np.mean(np.sum(np.sqrt((path_final_gen[d, sp, 1:-1, :] - path_final_gen[d, sp, 0:-2, :]) ** 2), axis=1))
+                #         ax.scatter(path_final_gen[d, sp, :, 0],
+                #             path_final_gen[d, sp, :, 1],
+                #             path_final_gen[d, sp, :, 2], color='b', marker='^')
+                #         ax.view_init(180, 180)
+                #         plt.axis('off')
+                #         plt.title('Approximate distance = ' + str(np.round(dist_av*20*1000, 2)) + ' mm, ' + 'approximate distance according to the speed = ' + str(speeds[sp]*20) + ' мм')
+
                 speed_generated[i, j, sim_n] = np.random.randint(0, sensor_waves.shape[1])  # speed for wave simulation
                 direction_ind = np.random.randint(0, sensor_waves.shape[0])
+
+                # overall direction calculated in the generate_sensor_waves script
                 generate_direction[sim_n, :] = direction[direction_ind, speed_generated[i, j, sim_n], :]  # direction for wave simulation
                 generate_direction_smooth[sim_n, :] = direction_smooth[direction_ind, speed_generated[i, j, sim_n], :]  # direction for wave simulation
                 generate_direction_pca[sim_n, :] = direction_pca[direction_ind, speed_generated[i, j, sim_n], :]  # direction for wave simulation
@@ -150,38 +167,36 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                         LASSO_inverse_solve(data, sensor_waves, False)
                 direction_ind_estimated = np.argmax(best_coefs)
 
-                # Visualization of 3d brain surfaces
-                # triangular_mesh(vertices_dense[:, 0], vertices_dense[:, 1], vertices_dense[:, 2], faces_dense, color=(0, 1, 1))
 
-               # PLOT FOR ONE SIMULATION VISUALIZATION
-               #  dist_av = np.mean(np.sum(np.sqrt((path_final_gen[direction_ind, speed_generated[i, j, sim_n], 1:-1,
-               #                          :] - path_final_gen[direction_ind, speed_generated[i, j, sim_n], 0:-2,
-               #                               :]) ** 2), axis=1))
-               #  fig = plt.figure()
-               #  for sp in range(0, len(speeds)):
-               #      ax = fig.add_subplot(5, 2, (sp+1), projection='3d')
-               #      # ax.scatter(vertices_dense[ind_close, 0], vertices_dense[ind_close, 1], vertices_dense[ind_close, 2])
-               #      ax.scatter(path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 0],
-               #                 path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 1],
-               #                 path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 2], color='r', marker='^')
-               #      for d in range(0, path_final.shape[0]):
-               #          ax.scatter(path_final[d, sp, :, 0],
-               #                     path_final[d, sp, :, 1],
-               #                     path_final[d, sp, :, 2], color='b', marker='^')
-               #          ax.view_init(180, 180)
-               #          plt.axis('off')
-               #      if (sp == speed_estimated[i, j, sim_n]):
-               #          ax.scatter(path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 0],
-               #                     path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 1],
-               #                     path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 2], color='g',  marker='^')
-               #          plt.title('BEST SOLUTION, propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
-               #              np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
-               #      elif (sp == speed_generated[i, j, sim_n]):
-               #          plt.title('TRUE SPEED, Propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
-               #              np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
-               #      else:
-               #          plt.title('Propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
-               #              np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
+               # PLOT FOR ONE SIMULATION
+                dist_av = np.mean(np.sum(np.sqrt((path_final_gen[direction_ind, speed_generated[i, j, sim_n], 1:-1,
+                                        :] - path_final_gen[direction_ind, speed_generated[i, j, sim_n], 0:-2,
+                                             :]) ** 2), axis=1))
+                # fig = plt.figure()
+                # for sp in range(0, len(speeds)):
+                #     ax = fig.add_subplot(5, 2, (sp+1), projection='3d')
+                #     # ax.scatter(vertices_dense[ind_close, 0], vertices_dense[ind_close, 1], vertices_dense[ind_close, 2])
+                #     ax.scatter(path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 0],
+                #                path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 1],
+                #                path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, 2], color='r', marker='^')
+                #     for d in range(0, path_final.shape[0]):
+                #         ax.scatter(path_final[d, sp, :, 0],
+                #                    path_final[d, sp, :, 1],
+                #                    path_final[d, sp, :, 2], color='b', marker='^')
+                #         ax.view_init(180, 180)
+                #         plt.axis('off')
+                #     if (sp == speed_estimated[i, j, sim_n]):
+                #         ax.scatter(path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 0],
+                #                    path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 1],
+                #                    path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, 2], color='g',  marker='^')
+                #         plt.title('BEST SOLUTION, propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
+                #             np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
+                #     elif (sp == speed_generated[i, j, sim_n]):
+                #         plt.title('TRUE SPEED, Propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
+                #             np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
+                #     else:
+                #         plt.title('Propagation speed = ' + str(speeds[sp]) + ', average distance = ' + str(
+                #             np.round(dist_av * 1000, 2)) + ' mm' + ', spatial error = ' + str(np.round(spatial_error[i, j, sim_n] * 1000, 2)) + ' mm')
 
 
                 # error in direction predicted (out of 1)
@@ -202,7 +217,6 @@ def direction_error_bst(data_dir, channel_type, params, snr, spatial_jitter, num
                 # q = path_final[direction_ind_estimated, speed_estimated[i, j, sim_n], :, :]
                 # p = path_final_gen[direction_ind, speed_generated[i, j, sim_n], :, :]
                 # qe = s_curve * R_curve @ p.T + np.tile(t_curve[:, np.newaxis], [1, 21])
-                #
                 # fig = plt.figure()
                 # ax = fig.add_subplot(111, projection='3d')
                 # ax.scatter(q[:, 0], q[:, 1], q[:, 2], color='r')
