@@ -4,17 +4,17 @@ from scipy import sparse
 
 def tris_to_adjacency(trimesh, n):
     """Function to transform trimeshs from grid to adjacency matrix
-            Parameters
-            ----------
-            trimesh : numpy.ndarray
-                Triads of vertices from the cortical model
-            n : int
-                Number of sources in model
+    Parameters
+    ----------
+    trimesh : numpy.ndarray
+        Triads of vertices from the cortical model
+    n : int
+        Number of sources in model
 
-            Returns
-            -------
-            adj_matrix : adjacency sparse matrix
-            """
+    Returns
+    -------
+    adj_matrix : adjacency sparse matrix
+    """
     edge_u = np.concatenate((trimesh[:, 0], trimesh[:, 0], trimesh[:, 1]))
     edge_v = np.concatenate((trimesh[:, 1], trimesh[:, 2], trimesh[:, 2]))
 

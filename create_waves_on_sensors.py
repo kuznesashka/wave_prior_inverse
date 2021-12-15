@@ -1,17 +1,27 @@
 import numpy as np
+from typing import Dict, Any
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spherical=0, max_step=100):
+def create_waves_on_sensors(
+    cortex: np.ndarray,
+    cortex_smooth: np.ndarray,
+    params: Dict[str, Any],
+    G: np.ndarray,
+    start_point: int,
+    spherical: bool = False,
+    max_step: int = 100
+):
     """Function to compute the basis waves
         Parameters
         ----------
-        cortex : numpy.ndarray
+        cortex : np.ndarray
             Cortical model structure from brainstorm
-        params : dict
+        cortex_smooth : np.ndarray
+        params : Dict[str, Any]
             Wave parameters
-        G : numpy.ndarray
+        G : np.ndarray
             Forward model matrix
         start_point : int
             The wave starting vertex
@@ -19,32 +29,36 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
             To add spherical wave or not
         max_step : int
             Maximal step for path
+
         Returns
         -------
         sensor_waves : waves [n_dir x n_speeds x n_chann x T]
         direction_final : direction of propagation in space [n_dir x n_speeds x 3]
         path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
-        """
+    """
 
     # wave parameters
-    speeds = params['speeds']
-    duration = params['duration']
-    fs = params['Fs']
+    speeds = params["speeds"]
+    duration = params["duration"]
+    fs = params["Fs"]
 
     # vertices and connections between them in cortical model
     vertices = cortex[0][1]
     vertices_smooth = cortex_smooth[0][0]
-    assert(vertices.shape == vertices_smooth.shape)
+    assert vertices.shape == vertices_smooth.shape
+
     flag = 0
     p = 2
     while flag == 0:
         if cortex[0][p].shape == (G.shape[1], G.shape[1]):
             flag = 1
         p += 1
+
     vert_conn = cortex[0][p - 1]
-    assert(vert_conn.shape == (G.shape[1], G.shape[1]))
+    assert vert_conn.shape == (G.shape[1], G.shape[1])
+
     vert_normals = cortex[0][p]
-    assert(vert_normals.shape == vertices.shape)
+    assert vert_normals.shape == vertices.shape
 
     # Create matrix with template paths in different directions from the starting point
     neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
@@ -67,14 +81,20 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
         neighbour_ind = neighbour_step_1[n]
         path_indices[n, 1] = neighbour_ind
 
-        norm_start = np.mean(vert_normals[neighbour_step_1], axis=0)  # average normal to all of the nearest neighbours
+        norm_start = np.mean(
+            vert_normals[neighbour_step_1], axis=0
+        )  # average normal to all of the nearest neighbours
         norm_start = norm_start[:, np.newaxis]
         norm_start = norm_start / np.linalg.norm(norm_start)
-        p_norm = np.identity(3) - norm_start @ norm_start.T  # projection away from average normal
+
+        p_norm = (
+            np.identity(3) - norm_start @ norm_start.T
+        )  # projection away from average normal
 
         direction_0 = vertices[neighbour_ind] - vertices[start_point]
         direction_0 = direction_0 @ p_norm.T
         direction_0 = direction_0 / np.linalg.norm(direction_0)
+
         d = 2
         while d <= max_step - 1:
             neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
@@ -107,21 +127,41 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
             for t in range(1, ntpoints):
                 if l < res:
                     alpha = 1 - l / res
-                    path_final[n, s, t, :] = alpha * path_final[n, s, (t - 1), :] + (1 - alpha) * vertices[path_indices[n, v2]]
-                    path_final_smooth[n, s, t, :] = alpha * path_final_smooth[n, s, (t - 1), :] + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                    forward_model[n, s, t, :] = alpha * forward_model[n, s, (t - 1), :] + (1 - alpha) * G[:, path_indices[n, v2]]
+                    path_final[n, s, t, :] = (
+                        alpha * path_final[n, s, (t - 1), :]
+                        + (1 - alpha) * vertices[path_indices[n, v2]]
+                    )
+                    path_final_smooth[n, s, t, :] = (
+                        alpha * path_final_smooth[n, s, (t - 1), :]
+                        + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
+                    )
+                    forward_model[n, s, t, :] = (
+                        alpha * forward_model[n, s, (t - 1), :]
+                        + (1 - alpha) * G[:, path_indices[n, v2]]
+                    )
                     res = res - l
                 elif l > res:
                     if res == 0:
                         if l < dist[(v2 - 1)]:
                             alpha = 1 - l / dist[(v2 - 1)]
-                            path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[path_indices[n, v2]]
-                            path_final_smooth[n, s, t, :] = alpha * vertices_smooth[path_indices[n, v1]] + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                            forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:, path_indices[n, v2]]
+                            path_final[n, s, t, :] = (
+                                alpha * vertices[path_indices[n, v1]]
+                                + (1 - alpha) * vertices[path_indices[n, v2]]
+                            )
+                            path_final_smooth[n, s, t, :] = (
+                                alpha * vertices_smooth[path_indices[n, v1]]
+                                + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
+                            )
+                            forward_model[n, s, t, :] = (
+                                alpha * G[:, path_indices[n, v1]]
+                                + (1 - alpha) * G[:, path_indices[n, v2]]
+                            )
                             res = dist[(v2 - 1)] - l
                         elif l == dist[(v2 - 1)]:
                             path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                            path_final_smooth[n, s, t, :] = vertices_smooth[path_indices[n, v2]]
+                            path_final_smooth[n, s, t, :] = vertices_smooth[
+                                path_indices[n, v2]
+                            ]
                             forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
                             v1 += 1
                             v2 += 1
@@ -134,11 +174,18 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
                                 v1 += 1
                                 v2 += 1
                             alpha = 1 - l2 / dist[(v2 - 1)]
-                            path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[path_indices[n, v2]]
-                            path_final_smooth[n, s, t, :] = alpha * vertices_smooth[path_indices[n, v1]] + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                            forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:,
-                                                                                                          path_indices[
-                                                                                                              n, v2]]
+                            path_final[n, s, t, :] = (
+                                alpha * vertices[path_indices[n, v1]]
+                                + (1 - alpha) * vertices[path_indices[n, v2]]
+                            )
+                            path_final_smooth[n, s, t, :] = (
+                                alpha * vertices_smooth[path_indices[n, v1]]
+                                + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
+                            )
+                            forward_model[n, s, t, :] = (
+                                alpha * G[:, path_indices[n, v1]]
+                                + (1 - alpha) * G[:, path_indices[n, v2]]
+                            )
                             res = dist[(v2 - 1)] - l2
                     else:
                         l2 = l - res
@@ -149,12 +196,18 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
                             v1 += 1
                             v2 += 1
                         alpha = 1 - l2 / dist[(v2 - 1)]
-                        path_final[n, s, t, :] = alpha * vertices[path_indices[n, v1]] + (1 - alpha) * vertices[
-                            path_indices[n, v2]]
-                        path_final_smooth[n, s, t, :] = alpha * vertices_smooth[path_indices[n, v1]] + (1 - alpha) * vertices_smooth[
-                            path_indices[n, v2]]
-                        forward_model[n, s, t, :] = alpha * G[:, path_indices[n, v1]] + (1 - alpha) * G[:, path_indices[
-                                                                                                               n, v2]]
+                        path_final[n, s, t, :] = (
+                            alpha * vertices[path_indices[n, v1]]
+                            + (1 - alpha) * vertices[path_indices[n, v2]]
+                        )
+                        path_final_smooth[n, s, t, :] = (
+                            alpha * vertices_smooth[path_indices[n, v1]]
+                            + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
+                        )
+                        forward_model[n, s, t, :] = (
+                            alpha * G[:, path_indices[n, v1]]
+                            + (1 - alpha) * G[:, path_indices[n, v2]]
+                        )
                         res = dist[(v2 - 1)] - l2
                 else:
                     path_final[n, s, t, :] = vertices[path_indices[n, v2]]
@@ -164,9 +217,11 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
                     v2 += 1
 
             direction_final[n, s, :] = path_final[n, s, -1, :] - path_final[n, s, 0, :]
-            direction_final_smooth[n, s, :] = path_final_smooth[n, s, -1, :] - path_final_smooth[n, s, 0, :]
+            direction_final_smooth[n, s, :] = (
+                path_final_smooth[n, s, -1, :] - path_final_smooth[n, s, 0, :]
+            )
 
-            [u, ll, v] = np.linalg.svd(path_final[n, s, :, :])
+            [u, _, _] = np.linalg.svd(path_final[n, s, :, :])
             direction_pca[n, s, :] = u[:, 1].T @ path_final[n, s, :, :]
 
     # visualization
@@ -179,7 +234,7 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
     # source time series
     t = np.arange(0, ntpoints * 2 / 100, 1 / 100)
     k = np.arange(0, ntpoints * 1 / 100, 1 / 100)
-    p = np.tile(t, (len(k), 1))-np.tile(k.T, (len(t), 1)).T
+    p = np.tile(t, (len(k), 1)) - np.tile(k.T, (len(t), 1)).T
     wave = np.sin(10 * np.pi * p) * np.exp(-10 * (2 * p + 0.2) ** 2)
     for i in range(0, ntpoints):
         wave[i, :i] = np.zeros(i)
@@ -205,7 +260,16 @@ def create_waves_on_sensors(cortex, cortex_smooth, params, G, start_point, spher
     if spherical == 1:
         for s in range(0, len(speeds)):
             for i in range(0, num_dir):
-                sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
+                sensor_waves[num_dir, s, :, :] = (
+                    sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
+                )
             sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] / num_dir
 
-    return [sensor_waves, path_final, path_final_smooth, direction_final, direction_final_smooth, direction_pca]
+    return [
+        sensor_waves,
+        path_final,
+        path_final_smooth,
+        direction_final,
+        direction_final_smooth,
+        direction_pca,
+    ]
