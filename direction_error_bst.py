@@ -30,6 +30,7 @@ def direction_error_bst(
         - G.mat (forward operator, low source number)
         - cortex.mat (cortical model, low source number)
         - G_dense.mat (forward_operator, high source number)
+        - cortes_dense.mat (cortical model, high source number)
     channel_type : str
         MEG channels to use: 'grad' or 'mag'.
     wave_generation_params : Dict[str, Any]
@@ -56,42 +57,31 @@ def direction_error_bst(
     """
 
     # Dense cortical grid
-    G_dense_raw = scipy.io.loadmat(data_dir + "/G_dense.mat")
-    cortex_dense_raw = scipy.io.loadmat(data_dir + "/cortex_dense.mat")
-    cortex_smooth_dense_raw = scipy.io.loadmat(data_dir + "/cortex_smooth_dense.mat")
+    G_dense = scipy.io.loadmat(data_dir + "/G_dense.mat")["G"]
+    cortex_dense = scipy.io.loadmat(data_dir + "/cortex_dense.mat")["cortex"][0]
+    cortex_smooth_dense = scipy.io.loadmat(data_dir + "/cortex_smooth_dense.mat")["cortex"][0]
 
     # Sparse cortical grid
-    G_raw = scipy.io.loadmat(data_dir + "/G.mat")
-    cortex_raw = scipy.io.loadmat(data_dir + "/cortex.mat")
-    cortex_smooth_raw = scipy.io.loadmat(data_dir + "/cortex_smooth.mat")
+    G = scipy.io.loadmat(data_dir + "/G.mat")["G"]
+    cortex = scipy.io.loadmat(data_dir + "/cortex.mat")["cortex"][0]
+    cortex_smooth = scipy.io.loadmat(data_dir + "/cortex_smooth.mat")["cortex"][0]
 
-    # Select channels according to channel_type
+    # Select channels according to the channel_type
     if channel_type == "mag":
         mag_indices = np.arange(2, 306, 3)
-        G_dense = G_dense_raw["G_dense_raw"][mag_indices]
-        G = G_raw["G_raw"][mag_indices]
+        G_dense = G_dense[mag_indices]
+        G = G[mag_indices]
     elif channel_type == "grad":
         grad_indices = np.setdiff1d(range(0, 306), np.arange(2, 306, 3))
-        G_dense = G_dense_raw["G_dense_raw"][grad_indices]
-        G = G_raw["G_raw"][grad_indices]
+        G_dense = G_dense[grad_indices]
+        G = G[grad_indices]
     else:
         print("Wrong channel name")
 
-    cortex_dense = cortex_dense_raw["cortex_dense_raw"][0]
-    cortex = cortex_raw["cortex_raw"][0]
-    cortex_smooth = cortex_smooth_raw["cortex_smooth_raw"][0]
-    cortex_smooth_dense = cortex_smooth_dense_raw["cortex_smooth_dense_raw"][0]
-
     vertices = cortex[0][1]
     vertices_dense = cortex_dense[0][1]
-    vertices_dense_smooth = cortex_smooth_dense[0][0]
-    faces_dense = cortex_dense[0][0] - 1
 
-    assert vertices_dense.shape == vertices_dense_smooth.shape
-    assert faces_dense.shape[1] == 3
-    assert faces_dense.shape[0] > vertices_dense.shape[0]
-
-    T = int(wave_generation_params["duration"] * wave_generation_params["Fs"] + 1) * 2  # duration in time
+    T = int(wave_generation_params["duration"] * wave_generation_params["Fs"] + 1) * 2  # wave duration in ms
 
     spatial_jitter_num = len(spatial_jitter_list)
     snr_num = len(snr_list)
@@ -103,15 +93,14 @@ def direction_error_bst(
     direction_error_pca = np.zeros([spatial_jitter_num, snr_num, simulation_number])
     spatial_error = np.zeros([spatial_jitter_num, snr_num, simulation_number])
 
-    # 3. ROC CURVE
-    y_true = np.zeros(simulation_number * 2)  # true labels
-    y_true[0:simulation_number] = np.ones(simulation_number)
+    # ROC curve
+    y_true = [1] * simulation_number + [0] * simulation_number  # true labels
     auc = np.zeros([snr_num, spatial_jitter_num])
 
     # ROC figure
     plt.figure()
 
-    for i in range(0, spatial_jitter_num):
+    for i, spatial_jitter in enumerate(spatial_jitter_list):
         plt.subplot(1, spatial_jitter_num, (i + 1))
         plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
         plt.xlim([0.0, 1.0])
@@ -119,7 +108,8 @@ def direction_error_bst(
         plt.xlabel("False Positive Rate")
         plt.ylabel("True Positive Rate")
 
-        for j in range(0, snr_num):
+        for j, snr in enumerate(snr_list):
+
             score_fit = np.zeros(2 * simulation_number)  # R-squared metrics for all simulations
 
             # true directions modeled
@@ -127,49 +117,45 @@ def direction_error_bst(
             generate_direction_smooth = np.zeros([simulation_number, 3])
             generate_direction_pca = np.zeros([simulation_number, 3])
 
-            # assumed starting source from the sparse model
-            src_idx = np.zeros(simulation_number, dtype=int)
-
-            # true starting source from the dense model
-            src_idx_dense = np.zeros(simulation_number, dtype=int)
+            starting_source_sparse = []  # assumed starting source from the sparse model
+            starting_source_dense = []  # true starting source from the dense model
 
             # brain noise array
             brain_noise_norm = np.zeros([G_dense.shape[0], T, simulation_number])
 
-            # in first simulation_number trials the data is generated using traveling waves
-            for sim_n in range(0, simulation_number):
-                # random starting source from sparse cortical model
-                src_idx[sim_n] = np.random.randint(0, G.shape[1])
+            # first `simulation_number` trials are traveling waves
+            for simulation_i in range(simulation_number):
 
-                # compute distance from starting source to all sources from dense cortical model
-                dist = np.sum(
-                    np.sqrt(
-                        (
-                            np.repeat(
-                                vertices[src_idx[sim_n], np.newaxis],
-                                vertices_dense.shape[0],
-                                axis=0,
-                            )
-                            - vertices_dense
-                        )
-                        ** 2
-                    ),
-                    axis=1,
+                # random starting source from sparse cortical model
+                starting_source_sparse.append(np.random.randint(G.shape[1]))
+
+                # compute the distance from starting source to all sources from the dense cortical model
+                starting_source_coordinates_repeated = (
+                    np.repeat(
+                        vertices[starting_source_sparse[simulation_i], np.newaxis],
+                        vertices_dense.shape[0],
+                        axis=0,
+                    )
                 )
 
+                distance_vector = np.linalg.norm(starting_source_coordinates_repeated - vertices_dense, axis=1)
+
                 # find close sources
-                ind_close = np.where(
-                    (dist > spatial_jitter_list[i]) & (dist <= (spatial_jitter_list[i] + 0.003))
+                close_sources_index_list = np.where(
+                    (distance_vector > spatial_jitter) & (distance_vector <= (spatial_jitter + 0.003))
                 )[0]
-                if len(ind_close) == 0:
+
+                if close_sources_index_list.size == 0:
                     continue
 
                 # pick randomly new starting source
-                src_idx_dense[sim_n] = ind_close[np.random.randint(0, len(ind_close))]
-                spatial_error[i, j, sim_n] = np.linalg.norm(
-                    vertices_dense[src_idx_dense[sim_n]] - vertices[src_idx[sim_n]]
+                starting_source_dense.append(np.random.choice(close_sources_index_list))
+                spatial_error[i, j, simulation_i] = np.linalg.norm(
+                    vertices_dense[starting_source_dense[simulation_i]]
+                    - vertices[starting_source_sparse[simulation_i]]
                 )
 
+                # calculate traveling wave
                 [
                     sensor_waves,
                     _,
@@ -182,42 +168,40 @@ def direction_error_bst(
                     cortex_smooth=cortex_smooth_dense,
                     params=wave_generation_params,
                     G=G_dense,
-                    start_point=src_idx_dense[sim_n],
+                    start_point=starting_source_dense[simulation_i],
                     spherical=False
                 )
 
                 # speed for wave simulation
-                speed_generated[i, j, sim_n] = np.random.randint(0, sensor_waves.shape[1])
-                direction_ind = np.random.randint(0, sensor_waves.shape[0])
+                speed_generated[i, j, simulation_i] = np.random.randint(sensor_waves.shape[1])
+                direction_ind = np.random.randint(sensor_waves.shape[0])
 
                 # overall direction calculated in the generate_sensor_waves script
                 # direction for wave simulation
-                generate_direction[sim_n, :] = direction[
-                    direction_ind, speed_generated[i, j, sim_n], :
-                ]
-                generate_direction_smooth[sim_n, :] = direction_smooth[
-                    direction_ind, speed_generated[i, j, sim_n], :
-                ]
-                generate_direction_pca[sim_n, :] = direction_pca[
-                    direction_ind, speed_generated[i, j, sim_n], :
-                ]
+                generate_direction[simulation_i, :] = direction[direction_ind, speed_generated[i, j, simulation_i], :]
+                generate_direction_smooth[simulation_i, :] = (
+                    direction_smooth[direction_ind, speed_generated[i, j, simulation_i], :]
+                )
+                generate_direction_pca[simulation_i, :] = (
+                    direction_pca[direction_ind, speed_generated[i, j, simulation_i], :]
+                )
 
                 # generate brain noise based on dense matrix
                 brain_noise = generate_brain_noise(G=G_dense)
-                brain_noise_norm[:, :, sim_n] = (
+                brain_noise_norm[:, :, simulation_i] = (
                         brain_noise[:, : sensor_waves.shape[3]]
                         / np.linalg.norm(brain_noise[:, : sensor_waves.shape[3]])
                 )  # normalized
 
-                wave_picked = sensor_waves[
-                    direction_ind, speed_generated[i, j, sim_n], :, :
-                ]
+                wave_picked = (
+                    sensor_waves[direction_ind, speed_generated[i, j, simulation_i], :, :]
+                )
 
                 # normalized wave
                 wave_picked_norm = wave_picked / np.linalg.norm(wave_picked)
 
                 # wave + noise
-                data = snr_list[j] * wave_picked_norm + brain_noise_norm[:, :, sim_n]
+                data = snr_list[j] * wave_picked_norm + brain_noise_norm[:, :, simulation_i]
 
                 # Generate basis waves using sparse cortical model starting from the initially picked point
                 # (with spatial error)
@@ -233,31 +217,31 @@ def direction_error_bst(
                     cortex_smooth=cortex_smooth,
                     params=wave_generation_params,
                     G=G,
-                    start_point=src_idx[sim_n],
+                    start_point=starting_source_sparse[simulation_i],
                     spherical=False
                 )
 
                 # Solve the LASSO problem without intercept
                 [
-                    score_fit[sim_n],
+                    score_fit[simulation_i],
                     _,
                     best_coefs,
                     _,
-                    speed_estimated[i, j, sim_n],
+                    speed_estimated[i, j, simulation_i],
                 ] = LASSO_inverse_solve(data=data, waves=sensor_waves, fit_intercept=False)
 
                 direction_ind_estimated = np.argmax(best_coefs)
 
                 # error in direction predicted (out of 1)
                 direction_error[i, j, sim_n] = 1 - abs(
-                    direction[direction_ind_estimated, speed_estimated[i, j, sim_n], :]
-                    @ generate_direction[sim_n, :]
+                    direction[direction_ind_estimated, speed_estimated[i, j, simulation_i], :]
+                    @ generate_direction[simulation_i, :]
                     / np.linalg.norm(
                         direction[
-                            direction_ind_estimated, speed_estimated[i, j, sim_n], :
+                            direction_ind_estimated, speed_estimated[i, j, simulation_i], :
                         ]
                     )
-                    / np.linalg.norm(generate_direction[sim_n, :])
+                    / np.linalg.norm(generate_direction[simulation_i, :])
                 )
 
                 direction_error_smooth[i, j, sim_n] = 1 - abs(
