@@ -1,4 +1,9 @@
-def create_blob_on_sensors(cortex, params, G, start_point, T, max_step=20):
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+
+def create_blob_on_sensors(cortex, G, start_point, T, max_step=20):
 
     """Function to create static blob
     Parameters
@@ -15,58 +20,41 @@ def create_blob_on_sensors(cortex, params, G, start_point, T, max_step=20):
         Recording duration
     max_step : int
         Number of vertices involved into the static activation
+
     Returns
     -------
-    sensor_blob : static blob on sensors [n_chann x T]
-    path_indices : indices of vertices in path [n_dir x max_step]
+    sensor_blob :
+        static blob on sensors [n_chann x T]
+    path_indices :
+        indices of vertices in path [n_dir x max_step]
     """
 
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-
-    # TODO: fix the duration thing
-    duration = params["duration"]
-    Fs = params["Fs"]
-
-    vertices = cortex[0][1]
-    flag = 0
-    p = 2
-    while flag == 0:
-        if cortex[0][p].shape == (G.shape[1], G.shape[1]):
-            flag = 1
-        p += 1
-    VertConn = cortex[0][p - 1]
-    VertNormals = cortex[0][p]
+    vertices = cortex["Vertices"][0]
+    vert_conn = cortex["VertConn"][0]
+    vert_normals = cortex["VertNormals"][0]
 
     # Create matrix with template paths in different directions from the starting point
-    neighbour_step_1 = VertConn[start_point, :].nonzero()[
-        1
-    ]  # nearest neighbours of the starting vertex
+    neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
     num_dir = len(neighbour_step_1)  # number of propagation directions
     path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
-    for n in range(0, num_dir):
+    for n in range(num_dir):
         path_indices[n, 0] = start_point
         neighbour_ind = neighbour_step_1[n]
         path_indices[n, 1] = neighbour_ind
 
-        norm_start = np.mean(
-            VertNormals[neighbour_step_1], axis=0
-        )  # average normal to all of the nearest neighbours
+        norm_start = np.mean(vert_normals[neighbour_step_1], axis=0)  # average normal to all of the nearest neighbours
         norm_start = norm_start[:, np.newaxis]
         norm_start = norm_start / np.linalg.norm(norm_start)
-        P_norm = (
-            np.identity(3) - norm_start @ norm_start.T
-        )  # projection away from average normal
+        P_norm = (np.identity(3) - norm_start @ norm_start.T)  # projection away from average normal
 
         direction_0 = vertices[neighbour_ind] - vertices[start_point]
         direction_0 = direction_0 @ P_norm.T
         direction_0 = direction_0 / np.linalg.norm(direction_0)
         d = 2
         while d <= max_step - 1:
-            neighbour_step_2 = VertConn[neighbour_ind, :].nonzero()[1]
+            neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
             cs = np.zeros(len(neighbour_step_2))
-            for p in range(0, len(neighbour_step_2)):
+            for p in range(len(neighbour_step_2)):
                 direction = vertices[neighbour_step_2[p]] - vertices[neighbour_ind]
                 direction = direction @ P_norm.T
                 direction = direction / np.linalg.norm(direction)
@@ -107,8 +95,8 @@ def create_blob_on_sensors(cortex, params, G, start_point, T, max_step=20):
 
     sensor_blob = np.zeros([G.shape[0], T])
     s = np.zeros([max_step, T])
-    for t in range(0, T):
-        s[:, t] = np.flip(g[max_step + 1, 1 : max_step + 1]) * h[t]
+    for t in range(T):
+        s[:, t] = np.flip(g[max_step + 1, 1: max_step + 1]) * h[t]
 
     # plt.figure()
     # plt.plot(s.T)

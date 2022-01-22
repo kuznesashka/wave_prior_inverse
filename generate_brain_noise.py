@@ -1,42 +1,58 @@
-def generate_brain_noise(G, N=500, Fs=1000):
-    """Function to generate brain noise
+import numpy as np
+import mne
+
+
+def generate_brain_noise(
+        G: np.ndarray,
+        active_source_number: int = 500,
+        sampling_frequency: int = 1000,
+        time_point_number: int = None
+):
+    """Function to generate brain noise.
     Parameters
     ----------
-    G : numpy.ndarray
-        Forward model matrix (N_channels x N_sources)
-    N : int
-        Number of active sources
-    Fs : int
-        Sampling frequency
+    G : np.ndarray
+        Forward model matrix (n_channels x n_sources).
+    active_source_number : int = 500
+        Number of active sources.
+    sampling_frequency : int = 1000
+        Sampling frequency.
+    time_point_number : Optional[int] = None
+        Number of time samples in the resulting array. If None, is set to sampling frequency.
     Returns
     -------
-    brain_noise : matrix with noise (N_channels x Fs)
+    brain_noise : matrix with brain noise (n_channels x time_point_number)
     """
+    total_source_number = G.shape[1]
+    active_source_indices = np.random.randint(0, total_source_number, active_source_number)
 
-    import numpy as np
-    import mne
+    data_to_filter = np.random.rand(active_source_number, 2 * sampling_frequency)
 
-    Nsrc = G.shape[1]
-    src_idx = np.random.randint(0, Nsrc, N)
+    oscillation_band_dictionary = {
+        'alpha': (8, 12),
+        'beta': (15, 30),
+        'gamma1': (30, 50),
+        'gamma2': (50, 70)
+    }
 
-    q = np.random.rand(N, 2 * Fs)
+    source_noise = np.zeros(data_to_filter.shape)
+    for band_name in oscillation_band_dictionary:
+        band_frequency = oscillation_band_dictionary[band_name]
+        data_bandpass_filtered = mne.filter.filter_data(
+            data=data_to_filter,
+            sfreq=sampling_frequency,
+            l_freq=band_frequency[0],
+            h_freq=band_frequency[1]
+        )
+        source_noise += 1 / np.mean(band_frequency) * data_bandpass_filtered
 
-    alpha_band = [8, 12]
-    beta_band = [15, 30]
-    gamma1_band = [30, 50]
-    gamma2_band = [50, 70]
-
-    A = mne.filter.filter_data(q, Fs, alpha_band[0], alpha_band[1])
-    B = mne.filter.filter_data(q, Fs, beta_band[0], beta_band[1])
-    C = mne.filter.filter_data(q, Fs, gamma1_band[0], gamma1_band[1])
-    D = mne.filter.filter_data(q, Fs, gamma2_band[0], gamma2_band[1])
-
-    source_noise = (
-        1 / np.mean(alpha_band) * A
-        + 1 / np.mean(beta_band) * B
-        + 1 / np.mean(gamma1_band) * C
-        + 1 / np.mean(gamma2_band) * D
+    brain_noise = (
+            G[:, active_source_indices]
+            @ source_noise[:, int(sampling_frequency / 2): int(sampling_frequency + sampling_frequency / 2)]
+            / active_source_number
     )
-    brain_noise = G[:, src_idx] @ source_noise[:, int(Fs / 2) : int(Fs + Fs / 2)] / N
+
+    time_point_number = time_point_number or sampling_frequency
+    brain_noise = brain_noise[:, :time_point_number]
 
     return brain_noise

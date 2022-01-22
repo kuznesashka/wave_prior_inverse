@@ -13,68 +13,65 @@ def create_waves_on_sensors(
     spherical: bool = False,
     max_step: int = 100
 ):
-    """Function to compute the basis waves
-        Parameters
-        ----------
-        cortex : np.ndarray
-            Cortical model structure from brainstorm
-        cortex_smooth : np.ndarray
-        params : Dict[str, Any]
-            Wave parameters
-        G : np.ndarray
-            Forward model matrix
-        start_point : int
-            The wave starting vertex
-        spherical : bool
-            To add spherical wave or not
-        max_step : int
-            Maximal step for path
+    """Function to compute basis waves.
+    Parameters
+    ----------
+    cortex : np.ndarray
+        Cortical model structure from brainstorm
+    cortex_smooth : np.ndarray
+    params : Dict[str, Any]
+        Wave parameters
+    G : np.ndarray
+        Forward model matrix
+    start_point : int
+        The wave starting vertex
+    spherical : bool
+        To add spherical wave or not
+    max_step : int
+        Maximal step for path
 
-        Returns
-        -------
-        sensor_waves : waves [n_dir x n_speeds x n_chann x T]
-        direction_final : direction of propagation in space [n_dir x n_speeds x 3]
-        path_final : coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
+    Returns
+    -------
+    sensor_waves :
+        waves [n_dir x n_speeds x n_chann x T]
+    direction_final :
+        direction of propagation in space [n_dir x n_speeds x 3]
+    path_final :
+        coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
     """
 
     # wave parameters
-    speeds = params["speeds"]
+    speed_list = params["speeds"]
     duration = params["duration"]
     fs = params["Fs"]
 
     # vertices and connections between them in cortical model
-    vertices = cortex[0][1]
-    vertices_smooth = cortex_smooth[0][0]
-    assert vertices.shape == vertices_smooth.shape
+    vertices = cortex["Vertices"][0]
+    vertices_smooth = cortex_smooth["Vertices"][0]
+    assert vertices.shape == vertices_smooth.shape, "smooth cortical model does not correspond to initial"
 
-    flag = 0
-    p = 2
-    while flag == 0:
-        if cortex[0][p].shape == (G.shape[1], G.shape[1]):
-            flag = 1
-        p += 1
+    vert_conn = cortex["VertConn"][0]
+    assert vert_conn.shape == (G.shape[1], G.shape[1]), "cortical model does not correspond to forward model"
 
-    vert_conn = cortex[0][p - 1]
-    assert vert_conn.shape == (G.shape[1], G.shape[1])
-
-    vert_normals = cortex[0][p]
-    assert vert_normals.shape == vertices.shape
+    vert_normals = cortex["VertNormals"][0]
+    assert vert_normals.shape == vertices.shape, "cortical model is broken"
 
     # Create matrix with template paths in different directions from the starting point
     neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
     num_dir = len(neighbour_step_1)  # number of propagation directions
     path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
 
+    speed_num = len(speed_list)
     ntpoints = int(fs * duration) + 1  # number of time points to generate
-    path_final = np.zeros([num_dir, len(speeds), ntpoints, 3])
-    path_final_smooth = np.zeros([num_dir, len(speeds), ntpoints, 3])
-    forward_model = np.zeros([num_dir, len(speeds), ntpoints, G.shape[0]])
-    direction_final = np.zeros([num_dir, len(speeds), 3])
-    direction_final_smooth = np.zeros([num_dir, len(speeds), 3])
-    direction_pca = np.zeros([num_dir, len(speeds), 3])
+    path_final = np.zeros([num_dir, speed_num, ntpoints, 3])
+    path_final_smooth = np.zeros([num_dir, speed_num, ntpoints, 3])
+    forward_model = np.zeros([num_dir, speed_num, ntpoints, G.shape[0]])
+    direction_final = np.zeros([num_dir, speed_num, 3])
+    direction_final_smooth = np.zeros([num_dir, speed_num, 3])
+    direction_pca = np.zeros([num_dir, speed_num, 3])
     tstep = 1 / fs
 
-    for n in range(0, num_dir):
+    for n in range(num_dir):
 
         # templates of paths
         path_indices[n, 0] = start_point
@@ -99,7 +96,7 @@ def create_waves_on_sensors(
         while d <= max_step - 1:
             neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
             cs = np.zeros(len(neighbour_step_2))
-            for p in range(0, len(neighbour_step_2)):
+            for p in range(len(neighbour_step_2)):
                 direction = vertices[neighbour_step_2[p]] - vertices[neighbour_ind]
                 direction = direction @ p_norm.T
                 direction = direction / np.linalg.norm(direction)
@@ -116,8 +113,8 @@ def create_waves_on_sensors(
         dist = np.sqrt(np.sum((next - first) ** 2, axis=1))
 
         # final paths considering the speed values
-        for s in range(0, len(speeds)):
-            l = speeds[s] * tstep
+        for s in range(0, speed_num):
+            l = speed_list[s] * tstep
             path_final[n, s, 0, :] = vertices[start_point]
             path_final_smooth[n, s, 0, :] = vertices_smooth[start_point]
             forward_model[n, s, 0, :] = G[:, start_point]
@@ -247,10 +244,10 @@ def create_waves_on_sensors(
 
     T = wave.shape[1]
     if spherical == 1:
-        sensor_waves = np.zeros([num_dir + 1, len(speeds), G.shape[0], T])
+        sensor_waves = np.zeros([num_dir + 1, speed_num, G.shape[0], T])
     else:
-        sensor_waves = np.zeros([num_dir, len(speeds), G.shape[0], T])
-    for s in range(0, len(speeds)):
+        sensor_waves = np.zeros([num_dir, speed_num, G.shape[0], T])
+    for s in range(0, speed_num):
         for i in range(0, num_dir):
             fm_s = np.zeros([G.shape[0], ntpoints])
             for k in range(0, ntpoints):
@@ -258,7 +255,7 @@ def create_waves_on_sensors(
             A = fm_s @ wave
             sensor_waves[i, s, :, :] = A
     if spherical == 1:
-        for s in range(0, len(speeds)):
+        for s in range(0, speed_num):
             for i in range(0, num_dir):
                 sensor_waves[num_dir, s, :, :] = (
                     sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]

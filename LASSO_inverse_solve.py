@@ -1,5 +1,9 @@
+import numpy as np
+from sklearn.linear_model import ElasticNetCV
+
+
 def LASSO_inverse_solve(data, waves, fit_intercept):
-    """Function to compute the inverse solution with LASSO with positive coefficients
+    """Function to compute the inverse solution with LASSO with positive coefficients.
     Parameters
     ----------
     data : numpy.ndarray
@@ -8,16 +12,18 @@ def LASSO_inverse_solve(data, waves, fit_intercept):
        Basis waves to fit (directions_number x number_of_speeds x channels_number x timepoints_number)
     fit_intercept: bool
         To add intercept or not
+
     Returns
     -------
-    best_score : R-squared in optimum
-    best_coefs : coefficients in optimum
-    best_shift : starting time point in optimum
-    best_speed_ind : index of the best speed
+    best_score :
+        R-squared in optimum
+    best_coefs :
+        coefficients in optimum
+    best_shift :
+        starting time point in optimum
+    best_speed_ind :
+        index of the best speed
     """
-
-    import numpy as np
-    from sklearn.linear_model import ElasticNetCV
 
     Ndir = waves.shape[0]  # number of propagation directions
     R = data.shape[1] - waves.shape[3] + 1  # number of sliding window shifts
@@ -34,12 +40,12 @@ def LASSO_inverse_solve(data, waves, fit_intercept):
     nzdir = np.zeros([R, S])  # number of nonzero directions
     y_pred = np.zeros([R, S, data.shape[0] * data.shape[1]])  # predicted spikes
 
-    for r in range(0, R):
-        data_vec = data[:, r : (Tw + r)].flatten()
-        for s in range(0, S):
+    for r in range(R):
+        data_vec = data[:, r: (Tw + r)].flatten()
+        for s in range(S):
             wavesspeed = waves[:, s, :, :]
             wavesspeed_vec = np.zeros([Ndir, data_vec.shape[0]])
-            for d in range(0, Ndir):
+            for d in range(Ndir):
                 wavesspeed_vec[d] = wavesspeed[d, :, :].flatten()
             regression.fit(wavesspeed_vec.T, data_vec)
             coefs[r, s, :] = regression.coef_
