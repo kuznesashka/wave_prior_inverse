@@ -63,6 +63,14 @@ def load_input_data(data_dir: str, channel_type: str):
 
     vertices = cortex["Vertices"][0]
     vertices_dense = cortex_dense["Vertices"][0]
+    vertices_smooth = cortex_smooth["Vertices"][0]
+    assert vertices.shape == vertices_smooth.shape, "smooth cortical model does not correspond to initial model"
+
+    vert_conn = cortex["VertConn"][0]
+    assert vert_conn.shape == (G.shape[1], G.shape[1]), "cortical model does not correspond to forward model"
+
+    vert_normals = cortex["VertNormals"][0]
+    assert vert_normals.shape == vertices.shape, "cortical model is broken"
 
     return (
         G_dense,
@@ -72,5 +80,8 @@ def load_input_data(data_dir: str, channel_type: str):
         cortex_smooth_dense,
         cortex_smooth,
         vertices,
-        vertices_dense
+        vertices_dense,
+        vertices_smooth,
+        vert_conn,
+        vert_normals
     )

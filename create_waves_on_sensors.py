@@ -1,34 +1,560 @@
+import scipy.sparse.csc as csc
 import numpy as np
-from typing import Dict, Any
+from typing import List, Dict, Any
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+# from mpl_toolkits.mplot3d import Axes3D
+
+
+def calculate_direction_vector(
+        vertices: np.ndarray,
+        ind1: int,
+        ind2: int,
+        projector: np.ndarray
+):
+    """
+
+    Parameters
+    ----------
+    vertices
+    ind1
+    ind2
+    projector
+
+    Returns
+    -------
+
+    """
+    direction_vector = vertices[ind2] - vertices[ind1]
+    direction_vector = direction_vector @ projector.T
+    direction_vector = direction_vector / np.linalg.norm(direction_vector)
+    return direction_vector
+
+
+def create_template_paths(
+        wave_generation_params: Dict[str, Any],
+        start_source_index: int,
+        vertices: np.ndarray,
+        vert_conn: csc.csc_matrix,
+        vert_normals: np.ndarray
+):
+    """Calculate template cortical paths for waves.
+    Consider only propagation directions, but not actual propagation speed.
+
+    Parameters
+    ----------
+    wave_generation_params : Dict[str, Any]
+        Wave parameters.
+    start_source_index : int
+        Index of the wave starting source.
+    vertices : np.ndarray
+        Vertex coordinates for cortical model.
+    vert_conn
+    vert_normals
+
+    Returns
+    -------
+
+    """
+    speed_list = wave_generation_params["speeds"]
+    max_distance = max(speed_list) * wave_generation_params["duration"]
+
+    # nearest neighbours of the starting vertex
+    nearest_neighbour_list = vert_conn[start_source_index, :].nonzero()[1]
+    propagation_direction_num = len(nearest_neighbour_list)
+
+    # create empty dictionary for template paths propagating in different directions from the starting point
+    template_path_index_array = dict()
+    distance_to_next_source = dict()
+
+    # average normal vector for all of the nearest neighbours
+    normal_init = np.mean(vert_normals[nearest_neighbour_list], axis=0)[:, np.newaxis]
+    normal_init = normal_init / np.linalg.norm(normal_init)
+
+    # projection away from the average normal vector
+    projector_away_from_normal_init = np.identity(3) - normal_init @ normal_init.T
+
+    for direction_i in range(propagation_direction_num):
+        selected_neighbour_ind = nearest_neighbour_list[direction_i]
+        template_i = [start_source_index, selected_neighbour_ind]
+        total_distance_passed = np.linalg.norm(vertices[selected_neighbour_ind] - vertices[start_source_index])
+        distance_i = [total_distance_passed]
+
+        direction_vector_init = calculate_direction_vector(
+            vertices=vertices,
+            ind1=start_source_index,
+            ind2=selected_neighbour_ind,
+            projector=projector_away_from_normal_init
+        )
+
+        neighbour_i = 2
+        while total_distance_passed <= max_distance:
+            next_step_neighbour_list = vert_conn[selected_neighbour_ind, :].nonzero()[1]
+            cs = []
+            for p in range(len(next_step_neighbour_list)):
+                direction = calculate_direction_vector(
+                    vertices=vertices,
+                    ind1=selected_neighbour_ind,
+                    ind2=next_step_neighbour_list[p],
+                    projector=projector_away_from_normal_init
+                )
+                cs.append(direction @ direction_vector_init.T)
+            csmax_ind = np.argmax(cs)
+            previous_source_ind = selected_neighbour_ind
+            selected_neighbour_ind = next_step_neighbour_list[csmax_ind]
+            template_i.append(selected_neighbour_ind)
+            dist_to_new_neighbour = np.linalg.norm(vertices[selected_neighbour_ind] - vertices[previous_source_ind])
+            distance_i.append(dist_to_new_neighbour)
+            total_distance_passed += dist_to_new_neighbour
+            neighbour_i += 1
+
+        template_path_index_array[direction_i] = template_i
+        distance_to_next_source[direction_i] = distance_i
+
+    return template_path_index_array, distance_to_next_source
+
+
+def plot_template_paths(vertices: np.ndarray, template_path_index_array: Dict[int, List[int]]):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(vertices[0:-1:100, 0], vertices[0:-1:100, 1], vertices[0:-1:100, 2])
+    for direction_i in template_path_index_array:
+        vertex_index_list = template_path_index_array[direction_i]
+        ax.scatter(
+            vertices[vertex_index_list, 0],
+            vertices[vertex_index_list, 1],
+            vertices[vertex_index_list, 2],
+            marker='^'
+        )
+
+
+def one_step_lower_than_residual(
+        v2: int,
+        G: np.ndarray,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        distance_residual: float,
+        one_step_distance: float,
+        coord_previous: np.ndarray,
+        coord_smooth_previous: np.ndarray,
+        forward_model_previous: np.ndarray,
+        template_path_index_direction_i: List[int]
+):
+
+    alpha = 1 - one_step_distance / distance_residual
+    v2_source_ind = template_path_index_direction_i[v2]
+
+    coord_next = alpha * coord_previous + (1 - alpha) * vertices[v2_source_ind]
+    coord_smooth_next = alpha * coord_smooth_previous + (1 - alpha) * vertices_smooth[v2_source_ind]
+    forward_model_next = alpha * forward_model_previous + (1 - alpha) * G[:, v2_source_ind]
+    distance_residual = distance_residual - one_step_distance
+
+    return (
+        distance_residual,
+        coord_next,
+        coord_smooth_next,
+        forward_model_next
+    )
+
+
+def one_step_higher_than_distance_to_next_source(
+        v1: int,
+        v2: int,
+        one_step_distance: float,
+        distance_to_go: float,
+        distance_to_next_source_direction_i: List[float]
+):
+    one_step_residual = one_step_distance - distance_to_go
+    v1 += 1
+    v2 += 1
+    distance_to_go = distance_to_next_source_direction_i[(v2 - 1)]
+    while one_step_residual > distance_to_go:
+        one_step_residual = one_step_residual - distance_to_go
+        v1 += 1
+        v2 += 1
+        distance_to_go = distance_to_next_source_direction_i[(v2 - 1)]
+    return v1, v2, one_step_residual, distance_to_go
+
+
+def one_step_higher_than_residual(
+        v1: int,
+        v2: int,
+        G: np.ndarray,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        distance_residual: float,
+        one_step_distance: float,
+        template_path_index_direction_i: List[int],
+        distance_to_next_source_direction_i: List[float]
+):
+    """
+
+    Parameters
+    ----------
+    v1 : int
+        Order index of the first vertex on the edge the wave travels at the moment.
+    v2 : int
+        Order index of the second vertex on the edge the wave travels at the moment.
+    G : np.ndarray
+        Forward model matrix.
+    vertices : np.ndarray
+        Vertices coordinates in the cortical model.
+    vertices_smooth : np.ndarray
+        Vertices coordinates in the smooth cortical model.
+    distance_residual : float
+        Distance left to reach v2.
+    one_step_distance : float
+        Distance wave completes in one step.
+    template_path_index_direction_i : List[int]
+    distance_to_next_source_direction_i
+
+    Returns
+    -------
+
+    """
+    distance_to_go = distance_to_next_source_direction_i[(v2 - 1)]
+    if distance_residual == 0 and one_step_distance == distance_to_go:
+        v2_source_ind = template_path_index_direction_i[v2]
+        coord_next = vertices[v2_source_ind]
+        coord_smooth_next = vertices_smooth[v2_source_ind]
+        forward_model_next = G[:, v2_source_ind]
+        v1 += 1
+        v2 += 1
+    else:
+        if distance_residual == 0 and one_step_distance > distance_to_go:
+            v1, v2, one_step_residual, distance_to_go = one_step_higher_than_distance_to_next_source(
+                v1=v1,
+                v2=v2,
+                one_step_distance=one_step_distance,
+                distance_to_go=distance_to_go,
+                distance_to_next_source_direction_i=distance_to_next_source_direction_i
+            )
+            alpha = 1 - one_step_residual / distance_to_go
+            distance_residual = distance_to_go - one_step_residual
+        elif distance_residual == 0 and one_step_distance < distance_to_go:
+            alpha = 1 - one_step_distance / distance_to_go
+            distance_residual = distance_to_go - one_step_distance
+        else:
+            v1, v2, one_step_residual, distance_to_go = one_step_higher_than_distance_to_next_source(
+                v1=v1,
+                v2=v2,
+                one_step_distance=one_step_distance,
+                distance_to_go=distance_residual,
+                distance_to_next_source_direction_i=distance_to_next_source_direction_i
+            )
+            alpha = 1 - one_step_residual / distance_to_go
+            distance_residual = distance_to_go - one_step_residual
+
+        v1_source_ind = template_path_index_direction_i[v1]
+        v2_source_ind = template_path_index_direction_i[v2]
+        coord_next = alpha * vertices[v1_source_ind] + (1 - alpha) * vertices[v2_source_ind]
+        coord_smooth_next = alpha * vertices_smooth[v1_source_ind] + (1 - alpha) * vertices_smooth[v2_source_ind]
+        forward_model_next = alpha * G[:, v1_source_ind] + (1 - alpha) * G[:, v2_source_ind]
+
+    return (
+        v1,
+        v2,
+        distance_residual,
+        coord_next,
+        coord_smooth_next,
+        forward_model_next
+    )
+
+
+def one_step_equals_to_residual(
+    v1: int,
+    v2: int,
+    G: np.ndarray,
+    vertices: np.ndarray,
+    vertices_smooth: np.ndarray,
+    template_path_index_direction_i: List[int]
+):
+    """
+
+    Parameters
+    ----------
+    v1
+    v2
+    G
+    vertices
+    vertices_smooth
+    template_path_index_direction_i
+
+    Returns
+    -------
+
+    """
+    v2_source_ind = template_path_index_direction_i[v2]
+    coord_next = vertices[v2_source_ind]
+    coord_smooth_next = vertices_smooth[v2_source_ind]
+    forward_model_next = G[:, v2_source_ind]
+    v1 += 1
+    v2 += 1
+
+    return (
+        v1,
+        v2,
+        coord_next,
+        coord_smooth_next,
+        forward_model_next
+    )
+
+
+def create_wave_cortical_paths(
+        template_path_index_array: Dict[int, List[int]],
+        distance_to_next_source: Dict[int, List[int]],
+        wave_generation_params: Dict[str, Any],
+        start_source_index: int,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        G: np.ndarray
+):
+    """Calculate actual wave paths considering the speed values.
+
+    Parameters
+    ----------
+    template_path_index_array
+    distance_to_next_source
+    wave_generation_params
+    start_source_index
+    vertices
+    vertices_smooth
+    G
+
+    Returns
+    -------
+
+    """
+    speed_list = wave_generation_params["speeds"]
+    wave_duration_sec = wave_generation_params["duration"]
+    sampling_frequency = wave_generation_params["Fs"]
+
+    one_step_duration_sec = 1 / sampling_frequency
+
+    channels_num = G.shape[0]
+
+    speed_num = len(speed_list)  # number of propagation speeds
+    time_points_num = int(sampling_frequency * wave_duration_sec) + 1  # number of observations
+
+    propagation_direction_num = len(template_path_index_array.keys())  # number of propagation directions
+
+    path_coordinates_array = np.zeros([propagation_direction_num, speed_num, time_points_num, 3])
+    path_coordinates_smooth_array = np.zeros([propagation_direction_num, speed_num, time_points_num, 3])
+    forward_model_updated = np.zeros([propagation_direction_num, speed_num, time_points_num, channels_num])
+
+    propagation_direction_coord = np.zeros([propagation_direction_num, speed_num, 3])
+    propagation_direction_coord_smooth = np.zeros([propagation_direction_num, speed_num, 3])
+    propagation_direction_coord_pca = np.zeros([propagation_direction_num, speed_num, 3])
+
+    for direction_i in range(propagation_direction_num):
+        for speed_i, speed in enumerate(speed_list):
+            one_step_distance = speed * one_step_duration_sec  # distance that wave travels in one step
+
+            # initialization of coordinates with first source
+            coord_previous = vertices[start_source_index]
+            coord_smooth_previous = vertices_smooth[start_source_index]
+            forward_model_previous = G[:, start_source_index]
+
+            path_coordinates_array[direction_i, speed_i, 0, :] = coord_previous
+            path_coordinates_smooth_array[direction_i, speed_i, 0, :] = coord_smooth_previous
+            forward_model_updated[direction_i, speed_i, 0, :] = forward_model_previous
+
+            distance_to_next_source_direction_i = distance_to_next_source[direction_i]
+            template_path_index_direction_i = template_path_index_array[direction_i]
+            distance_residual = 0
+            v1 = 0
+            v2 = 1
+            for time_i in range(1, time_points_num):
+                if one_step_distance < distance_residual:
+                    (
+                        distance_residual,
+                        coord_next,
+                        coord_smooth_next,
+                        forward_model_next
+                    ) = one_step_lower_than_residual(
+                        v2=v2,
+                        G=G,
+                        vertices=vertices,
+                        vertices_smooth=vertices_smooth,
+                        distance_residual=distance_residual,
+                        one_step_distance=one_step_distance,
+                        coord_previous=coord_previous,
+                        coord_smooth_previous=coord_smooth_previous,
+                        forward_model_previous=forward_model_previous,
+                        template_path_index_direction_i=template_path_index_direction_i
+                    )
+                elif one_step_distance > distance_residual:
+                    (
+                        v1,
+                        v2,
+                        distance_residual,
+                        coord_next,
+                        coord_smooth_next,
+                        forward_model_next
+                    ) = one_step_higher_than_residual(
+                        v1=v1,
+                        v2=v2,
+                        G=G,
+                        vertices=vertices,
+                        vertices_smooth=vertices_smooth,
+                        distance_residual=distance_residual,
+                        one_step_distance=one_step_distance,
+                        template_path_index_direction_i=template_path_index_direction_i,
+                        distance_to_next_source_direction_i=distance_to_next_source_direction_i
+                    )
+                else:
+                    (v1, v2, coord_next, coord_smooth_next, forward_model_next) = one_step_equals_to_residual(
+                        v1=v1,
+                        v2=v2,
+                        G=G,
+                        vertices=vertices,
+                        vertices_smooth=vertices_smooth,
+                        template_path_index_direction_i=template_path_index_direction_i
+                    )
+
+                path_coordinates_array[direction_i, speed_i, time_i, :] = coord_next
+                path_coordinates_smooth_array[direction_i, speed_i, time_i, :] = coord_smooth_next
+                forward_model_updated[direction_i, speed_i, time_i, :] = forward_model_next
+
+                coord_previous = coord_next
+                coord_smooth_previous = coord_smooth_next
+                forward_model_previous = forward_model_next
+
+            propagation_direction_coord[direction_i, speed_i, :] = (
+                    path_coordinates_array[direction_i, speed_i, -1, :]
+                    - path_coordinates_array[direction_i, speed_i, 0, :]
+            )
+
+            propagation_direction_coord_smooth[direction_i, speed_i, :] = (
+                    path_coordinates_smooth_array[direction_i, speed_i, -1, :]
+                    - path_coordinates_smooth_array[direction_i, speed_i, 0, :]
+            )
+
+            [u, _, _] = np.linalg.svd(path_coordinates_array[direction_i, speed_i, :, :])
+            propagation_direction_coord_pca[direction_i, speed_i, :] = (
+                    u[:, 1].T @ path_coordinates_array[direction_i, speed_i, :, :]
+            )
+
+    return (
+        path_coordinates_array,
+        path_coordinates_smooth_array,
+        forward_model_updated,
+        propagation_direction_coord,
+        propagation_direction_coord_smooth,
+        propagation_direction_coord_pca
+    )
+
+
+def create_time_series_for_waves(wave_generation_params: Dict[str, Any], plot_time_series: bool = False):
+    """Calculate time series vectors for waves.
+
+    Parameters
+    ----------
+    wave_generation_params : Dict[str, Any]
+        Wave parameters (duration, sampling_frequency).
+    plot_time_series : bool = False
+        If True, plot time series on graph.
+
+    Returns
+    -------
+    wave_time_series : np.ndarray
+        Time series for waves [observed_source_num x time_points_num * 2].
+        Assume that observed_source_num = time_points_num, as
+        each observation corresponds to one source on the wave path.
+        Each row corresponds to one source on the wave path.
+        Time series length is twice as long as the number of observations.
+    """
+    wave_duration_sec = wave_generation_params["duration"]
+    sampling_frequency = wave_generation_params["Fs"]
+    time_points_num = int(sampling_frequency * wave_duration_sec) + 1  # observations number
+
+    step_value = 1 / 100
+    time_points_list = np.arange(0, time_points_num * 1 * step_value, step=step_value)
+    time_points_list_double = np.arange(0, time_points_num * 2 * step_value, step=step_value)
+
+    time_points_grid = (
+        np.tile(time_points_list_double, (time_points_num, 1))
+        - np.tile(time_points_list.T, (time_points_num * 2, 1)).T
+    )
+    wave_time_series = np.sin(10 * np.pi * time_points_grid) * np.exp(-10 * (2 * time_points_grid + 0.2) ** 2)
+
+    for time_i in range(time_points_num):
+        wave_time_series[time_i, :time_i] = np.zeros(time_i)
+
+    if plot_time_series:
+        plt.figure()
+        plt.plot(time_points_list_double, wave_time_series[0], "r", lw=3)
+        plt.plot(time_points_list_double, wave_time_series.T[:, 1:], "k")
+        plt.xlabel("Time, ms")
+        plt.ylabel("Amplitude, a.u.")
+        plt.title("Wave time series")
+        plt.legend(["First source"])
+        plt.grid()
+    return wave_time_series
+
+
+def project_wave_on_sensors(
+        wave_time_series,
+        wave_generation_params,
+        add_spherical_wave,
+        propagation_direction_num,
+        channels_num,
+        forward_model_updated
+):
+    speed_list = wave_generation_params["speeds"]
+    speed_num = len(speed_list)
+
+    wave_duration_sec = wave_generation_params["duration"]
+    sampling_frequency = wave_generation_params["Fs"]
+    time_points_num = int(sampling_frequency * wave_duration_sec) + 1  # number of time points to generate
+
+    total_duration = wave_time_series.shape[1]
+    if add_spherical_wave:
+        waves_on_sensors = np.zeros([propagation_direction_num + 1, speed_num, channels_num, total_duration])
+    else:
+        waves_on_sensors = np.zeros([propagation_direction_num, speed_num, channels_num, total_duration])
+    for speed_i in range(speed_num):
+        for direction_i in range(propagation_direction_num):
+            fm_s = np.zeros([channels_num, time_points_num])
+            for time_i in range(time_points_num):
+                fm_s[:, time_i] = forward_model_updated[direction_i, speed_i, time_i, :]
+            A = fm_s @ wave_time_series
+            waves_on_sensors[direction_i, speed_i, :, :] = A
+    if add_spherical_wave:
+        for speed_i in range(speed_num):
+            for direction_i in range(propagation_direction_num):
+                waves_on_sensors[propagation_direction_num, speed_i, :, :] = (
+                        waves_on_sensors[propagation_direction_num, speed_i, :, :]
+                        + waves_on_sensors[direction_i, speed_i, :, :]
+                )
+
+            waves_on_sensors[propagation_direction_num, speed_i, :, :] = (
+                    waves_on_sensors[propagation_direction_num, speed_i, :, :] / propagation_direction_num
+            )
+
+    return waves_on_sensors
 
 
 def create_waves_on_sensors(
-    cortex: np.ndarray,
-    cortex_smooth: np.ndarray,
-    params: Dict[str, Any],
-    G: np.ndarray,
-    start_point: int,
-    spherical: bool = False,
-    max_step: int = 100
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        vert_conn: csc.csc_matrix,
+        vert_normals: np.ndarray,
+        G: np.ndarray,
+        wave_generation_params: Dict[str, Any],
+        start_source_index: int,
+        add_spherical_wave: bool = False
 ):
     """Function to compute basis waves.
     Parameters
     ----------
-    cortex : np.ndarray
-        Cortical model structure from brainstorm
-    cortex_smooth : np.ndarray
-    params : Dict[str, Any]
+    wave_generation_params : Dict[str, Any]
         Wave parameters
     G : np.ndarray
         Forward model matrix
-    start_point : int
+    start_source_index : int
         The wave starting vertex
-    spherical : bool
+    add_spherical_wave : bool
         To add spherical wave or not
-    max_step : int
-        Maximal step for path
 
     Returns
     -------
@@ -40,233 +566,63 @@ def create_waves_on_sensors(
         coordinates of vertices in final paths [n_dir x n_speeds x T x 3]
     """
 
-    # wave parameters
-    speed_list = params["speeds"]
-    duration = params["duration"]
-    fs = params["Fs"]
+    channels_num = G.shape[0]
 
-    # vertices and connections between them in cortical model
-    vertices = cortex["Vertices"][0]
-    vertices_smooth = cortex_smooth["Vertices"][0]
-    assert vertices.shape == vertices_smooth.shape, "smooth cortical model does not correspond to initial"
+    nearest_neighbour_list = vert_conn[start_source_index, :].nonzero()[1]  # nearest neighbours of the starting vertex
+    propagation_direction_num = len(nearest_neighbour_list)  # number of propagation directions
 
-    vert_conn = cortex["VertConn"][0]
-    assert vert_conn.shape == (G.shape[1], G.shape[1]), "cortical model does not correspond to forward model"
+    template_path_index_array, distance_to_next_source = create_template_paths(
+        wave_generation_params=wave_generation_params,
+        start_source_index=start_source_index,
+        vertices=vertices,
+        vert_conn=vert_conn,
+        vert_normals=vert_normals
+    )
 
-    vert_normals = cortex["VertNormals"][0]
-    assert vert_normals.shape == vertices.shape, "cortical model is broken"
+    (
+        path_coordinates_array,
+        path_coordinates_smooth_array,
+        forward_model_updated,
+        direction_final,
+        direction_final_smooth,
+        direction_pca
+    ) = create_wave_cortical_paths(
+        template_path_index_array=template_path_index_array,
+        distance_to_next_source=distance_to_next_source,
+        wave_generation_params=wave_generation_params,
+        start_source_index=start_source_index,
+        vertices=vertices,
+        vertices_smooth=vertices_smooth,
+        G=G
+    )
 
-    # Create matrix with template paths in different directions from the starting point
-    neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
-    num_dir = len(neighbour_step_1)  # number of propagation directions
-    path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
+    wave_time_series = create_time_series_for_waves(
+        wave_generation_params=wave_generation_params,
+        plot_time_series=True
+    )
 
-    speed_num = len(speed_list)
-    ntpoints = int(fs * duration) + 1  # number of time points to generate
-    path_final = np.zeros([num_dir, speed_num, ntpoints, 3])
-    path_final_smooth = np.zeros([num_dir, speed_num, ntpoints, 3])
-    forward_model = np.zeros([num_dir, speed_num, ntpoints, G.shape[0]])
-    direction_final = np.zeros([num_dir, speed_num, 3])
-    direction_final_smooth = np.zeros([num_dir, speed_num, 3])
-    direction_pca = np.zeros([num_dir, speed_num, 3])
-    tstep = 1 / fs
+    waves_on_sensors = project_wave_on_sensors(
+        wave_time_series=wave_time_series,
+        wave_generation_params=wave_generation_params,
+        add_spherical_wave=add_spherical_wave,
+        propagation_direction_num=propagation_direction_num,
+        channels_num=channels_num,
+        forward_model_updated=forward_model_updated
+    )
 
-    for n in range(num_dir):
-
-        # templates of paths
-        path_indices[n, 0] = start_point
-        neighbour_ind = neighbour_step_1[n]
-        path_indices[n, 1] = neighbour_ind
-
-        norm_start = np.mean(
-            vert_normals[neighbour_step_1], axis=0
-        )  # average normal to all of the nearest neighbours
-        norm_start = norm_start[:, np.newaxis]
-        norm_start = norm_start / np.linalg.norm(norm_start)
-
-        p_norm = (
-            np.identity(3) - norm_start @ norm_start.T
-        )  # projection away from average normal
-
-        direction_0 = vertices[neighbour_ind] - vertices[start_point]
-        direction_0 = direction_0 @ p_norm.T
-        direction_0 = direction_0 / np.linalg.norm(direction_0)
-
-        d = 2
-        while d <= max_step - 1:
-            neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
-            cs = np.zeros(len(neighbour_step_2))
-            for p in range(len(neighbour_step_2)):
-                direction = vertices[neighbour_step_2[p]] - vertices[neighbour_ind]
-                direction = direction @ p_norm.T
-                direction = direction / np.linalg.norm(direction)
-                cs[p] = direction @ direction_0.T
-
-            csmax_ind = np.argmax(cs)
-            neighbour_ind = neighbour_step_2[csmax_ind]
-            path_indices[n, d] = neighbour_ind
-            d += 1
-
-        # compute distance to the following point
-        first = vertices[path_indices[n, :-1]]
-        next = vertices[path_indices[n, 1:]]
-        dist = np.sqrt(np.sum((next - first) ** 2, axis=1))
-
-        # final paths considering the speed values
-        for s in range(0, speed_num):
-            l = speed_list[s] * tstep
-            path_final[n, s, 0, :] = vertices[start_point]
-            path_final_smooth[n, s, 0, :] = vertices_smooth[start_point]
-            forward_model[n, s, 0, :] = G[:, start_point]
-            res = 0
-            v1 = 0
-            v2 = 1
-            for t in range(1, ntpoints):
-                if l < res:
-                    alpha = 1 - l / res
-                    path_final[n, s, t, :] = (
-                        alpha * path_final[n, s, (t - 1), :]
-                        + (1 - alpha) * vertices[path_indices[n, v2]]
-                    )
-                    path_final_smooth[n, s, t, :] = (
-                        alpha * path_final_smooth[n, s, (t - 1), :]
-                        + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                    )
-                    forward_model[n, s, t, :] = (
-                        alpha * forward_model[n, s, (t - 1), :]
-                        + (1 - alpha) * G[:, path_indices[n, v2]]
-                    )
-                    res = res - l
-                elif l > res:
-                    if res == 0:
-                        if l < dist[(v2 - 1)]:
-                            alpha = 1 - l / dist[(v2 - 1)]
-                            path_final[n, s, t, :] = (
-                                alpha * vertices[path_indices[n, v1]]
-                                + (1 - alpha) * vertices[path_indices[n, v2]]
-                            )
-                            path_final_smooth[n, s, t, :] = (
-                                alpha * vertices_smooth[path_indices[n, v1]]
-                                + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                            )
-                            forward_model[n, s, t, :] = (
-                                alpha * G[:, path_indices[n, v1]]
-                                + (1 - alpha) * G[:, path_indices[n, v2]]
-                            )
-                            res = dist[(v2 - 1)] - l
-                        elif l == dist[(v2 - 1)]:
-                            path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                            path_final_smooth[n, s, t, :] = vertices_smooth[
-                                path_indices[n, v2]
-                            ]
-                            forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
-                            v1 += 1
-                            v2 += 1
-                        else:
-                            l2 = l - dist[(v2 - 1)]
-                            v1 += 1
-                            v2 += 1
-                            while l2 > dist[(v2 - 1)]:
-                                l2 = l2 - dist[(v2 - 1)]
-                                v1 += 1
-                                v2 += 1
-                            alpha = 1 - l2 / dist[(v2 - 1)]
-                            path_final[n, s, t, :] = (
-                                alpha * vertices[path_indices[n, v1]]
-                                + (1 - alpha) * vertices[path_indices[n, v2]]
-                            )
-                            path_final_smooth[n, s, t, :] = (
-                                alpha * vertices_smooth[path_indices[n, v1]]
-                                + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                            )
-                            forward_model[n, s, t, :] = (
-                                alpha * G[:, path_indices[n, v1]]
-                                + (1 - alpha) * G[:, path_indices[n, v2]]
-                            )
-                            res = dist[(v2 - 1)] - l2
-                    else:
-                        l2 = l - res
-                        v1 += 1
-                        v2 += 1
-                        while l2 > dist[(v2 - 1)]:
-                            l2 = l2 - dist[(v2 - 1)]
-                            v1 += 1
-                            v2 += 1
-                        alpha = 1 - l2 / dist[(v2 - 1)]
-                        path_final[n, s, t, :] = (
-                            alpha * vertices[path_indices[n, v1]]
-                            + (1 - alpha) * vertices[path_indices[n, v2]]
-                        )
-                        path_final_smooth[n, s, t, :] = (
-                            alpha * vertices_smooth[path_indices[n, v1]]
-                            + (1 - alpha) * vertices_smooth[path_indices[n, v2]]
-                        )
-                        forward_model[n, s, t, :] = (
-                            alpha * G[:, path_indices[n, v1]]
-                            + (1 - alpha) * G[:, path_indices[n, v2]]
-                        )
-                        res = dist[(v2 - 1)] - l2
-                else:
-                    path_final[n, s, t, :] = vertices[path_indices[n, v2]]
-                    path_final_smooth[n, s, t, :] = vertices_smooth[path_indices[n, v2]]
-                    forward_model[n, s, t, :] = G[:, path_indices[n, v2]]
-                    v1 += 1
-                    v2 += 1
-
-            direction_final[n, s, :] = path_final[n, s, -1, :] - path_final[n, s, 0, :]
-            direction_final_smooth[n, s, :] = (
-                path_final_smooth[n, s, -1, :] - path_final_smooth[n, s, 0, :]
-            )
-
-            [u, _, _] = np.linalg.svd(path_final[n, s, :, :])
-            direction_pca[n, s, :] = u[:, 1].T @ path_final[n, s, :, :]
-
-    # visualization
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.scatter(vertices[0:-1:100, 0], vertices[0:-1:100, 1], vertices[0:-1:100, 2])
-    # for d in range(0, path_final.shape[0]):
-    #     ax.scatter(path_final[d, s, :, 0], path_final[d, s, :, 1], path_final[d, s, :, 2], marker = '^')
-
-    # source time series
-    t = np.arange(0, ntpoints * 2 / 100, 1 / 100)
-    k = np.arange(0, ntpoints * 1 / 100, 1 / 100)
-    p = np.tile(t, (len(k), 1)) - np.tile(k.T, (len(t), 1)).T
-    wave = np.sin(10 * np.pi * p) * np.exp(-10 * (2 * p + 0.2) ** 2)
-    for i in range(0, ntpoints):
-        wave[i, :i] = np.zeros(i)
-
-    # plt.figure()
-    # plt.plot(t, wave.T, 'k')
-    # plt.plot(t, wave[0], 'r', label='First source', lw=3)
-    # plt.xlabel('Time, ms')
-    # plt.ylabel('Amplitude, a.u.')
-
-    T = wave.shape[1]
-    if spherical == 1:
-        sensor_waves = np.zeros([num_dir + 1, speed_num, G.shape[0], T])
-    else:
-        sensor_waves = np.zeros([num_dir, speed_num, G.shape[0], T])
-    for s in range(0, speed_num):
-        for i in range(0, num_dir):
-            fm_s = np.zeros([G.shape[0], ntpoints])
-            for k in range(0, ntpoints):
-                fm_s[:, k] = forward_model[i, s, k, :]
-            A = fm_s @ wave
-            sensor_waves[i, s, :, :] = A
-    if spherical == 1:
-        for s in range(0, speed_num):
-            for i in range(0, num_dir):
-                sensor_waves[num_dir, s, :, :] = (
-                    sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
-                )
-            sensor_waves[num_dir, s, :, :] = sensor_waves[num_dir, s, :, :] / num_dir
-
-    return [
-        sensor_waves,
-        path_final,
-        path_final_smooth,
+    return (
+        waves_on_sensors,
+        path_coordinates_array,
+        path_coordinates_smooth_array,
         direction_final,
         direction_final_smooth,
         direction_pca,
-    ]
+    )
+
+
+# def plot():
+# visualization fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d') ax.scatter(vertices[0:-1:100, 0],
+# vertices[0:-1:100, 1], vertices[0:-1:100, 2]) for d in range(0, path_coordinates_array.shape[0]): ax.scatter(
+# path_coordinates_array[d, s, :, 0], path_coordinates_array[d, s, :, 1], path_coordinates_array[d, s, :, 2],
+# marker = '^')
