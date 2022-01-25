@@ -31,12 +31,10 @@ simulation_number = 300
 
 start_source_index = 100000
 (
-    path_coordinates_array,
-    path_coordinates_smooth_array,
-    forward_model_updated,
-    propagation_direction_coord,
-    propagation_direction_coord_smooth,
-    propagation_direction_coord_pca
+    waves_on_sensors,
+    direction_final,
+    direction_final_smooth,
+    direction_pca
 ) = create_waves_on_sensors(
     vertices=vertices,
     vertices_smooth=vertices_smooth,
@@ -45,7 +43,8 @@ start_source_index = 100000
     G=G,
     wave_generation_params=wave_generation_params,
     start_source_index=start_source_index,
-    add_spherical_wave=False
+    add_spherical_wave=False,
+    plot_time_series=False
 )
 
 # (

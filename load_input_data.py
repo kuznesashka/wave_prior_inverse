@@ -38,6 +38,9 @@ def load_input_data(data_dir: str, channel_type: str):
         Vertex coordinates for dense model [n_sources_dense x 3].
     vertices : np.ndarray
         Vertex coordinates for sparse model [n_sources_sparse x 3].
+    vertices_smooth
+    vert_conn
+    vert_normals
     """
     # Dense cortical grid
     G_dense = scipy.io.loadmat(data_dir + "/G_dense.mat")["G"]
