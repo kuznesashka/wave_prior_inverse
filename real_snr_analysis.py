@@ -79,4 +79,3 @@ def estimate_real_snr():
         meg_file_name=meg_file_name, spike_index_list=spike_index_list
     )
     plot_real_spike_snr(snr_estimated=snr_estimated)
-

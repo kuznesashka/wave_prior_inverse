@@ -9,7 +9,7 @@ from collections import defaultdict
 from create_waves_on_sensors import create_waves_on_sensors
 from create_blob_on_sensors import create_blob_on_sensors
 from generate_brain_noise import generate_brain_noise
-from LASSO_inverse_solve import lasso_inverse_solve
+from lasso_inverse_solve import lasso_inverse_solve
 
 
 def find_close_sources(
