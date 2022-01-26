@@ -41,7 +41,7 @@ def create_template_paths(
 ):
     """Calculate template cortical paths for waves.
     Consider only propagation directions, but not actual propagation speed.
-    For each direction calculates the path with the lenght sufficient to wave with the maximal speed.
+    For each direction calculates the path with the length sufficient to wave with the maximal speed.
     Calculates the distance to the next source on the path as well.
 
     Parameters
@@ -111,9 +111,7 @@ def create_template_paths(
                 new_direction_closeness.append(direction @ direction_vector_init.T)
 
             previous_source_ind = selected_neighbour_ind
-            selected_neighbour_ind = next_step_neighbour_list[
-                np.argmax(new_direction_closeness)
-            ]
+            selected_neighbour_ind = next_step_neighbour_list[np.argmax(new_direction_closeness)]
             template_i.append(selected_neighbour_ind)
             dist_to_new_neighbour = np.linalg.norm(
                 vertices[selected_neighbour_ind] - vertices[previous_source_ind]

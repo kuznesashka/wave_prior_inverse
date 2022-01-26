@@ -1,108 +1,139 @@
 import numpy as np
+import scipy.sparse.csc as csc
+from create_waves_on_sensors import calculate_direction_vector
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 
-def create_blob_on_sensors(cortex, G, start_point, T, max_step=20):
+def create_template_path_fixed_length(
+        start_source_index: int,
+        vertices: np.ndarray,
+        vert_conn: csc.csc_matrix,
+        vert_normals: np.ndarray,
+        path_length: int = 20
+):
+    nearest_neighbour_list = vert_conn[start_source_index, :].nonzero()[1]
+    direction_num = len(nearest_neighbour_list)
 
-    """Function to create static blob
-    Parameters
-    ----------
-    cortex : numpy.ndarray
-        Cortical model structure from brainstorm
-    params : dict
-        Duration and sampling frequency
-    G : numpy.ndarray
-        Forward model matrix
-    start_point : int
-        The wave starting vertex
-    T : int
-        Recording duration
-    max_step : int
-        Number of vertices involved into the static activation
+    template_path_index_array = np.zeros([direction_num, path_length], dtype=int)
 
-    Returns
-    -------
-    sensor_blob :
-        static blob on sensors [n_chann x T]
-    path_indices :
-        indices of vertices in path [n_dir x max_step]
-    """
+    # average normal vector for all of the nearest neighbours
+    normal_init = np.mean(vert_normals[nearest_neighbour_list], axis=0)[:, np.newaxis]
+    normal_init = normal_init / np.linalg.norm(normal_init)
 
-    vertices = cortex["Vertices"][0]
-    vert_conn = cortex["VertConn"][0]
-    vert_normals = cortex["VertNormals"][0]
+    # projection away from the average normal vector
+    projector_away_from_normal_init = np.identity(3) - normal_init @ normal_init.T
 
-    # Create matrix with template paths in different directions from the starting point
-    neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]  # nearest neighbours of the starting vertex
-    num_dir = len(neighbour_step_1)  # number of propagation directions
-    path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
-    for n in range(num_dir):
-        path_indices[n, 0] = start_point
-        neighbour_ind = neighbour_step_1[n]
-        path_indices[n, 1] = neighbour_ind
+    for direction_i in range(direction_num):
+        selected_neighbour_ind = nearest_neighbour_list[direction_i]
+        template_i = [start_source_index, selected_neighbour_ind]
 
-        norm_start = np.mean(vert_normals[neighbour_step_1], axis=0)  # average normal to all of the nearest neighbours
-        norm_start = norm_start[:, np.newaxis]
-        norm_start = norm_start / np.linalg.norm(norm_start)
-        P_norm = (np.identity(3) - norm_start @ norm_start.T)  # projection away from average normal
+        direction_vector_init = calculate_direction_vector(
+            vertices=vertices,
+            ind1=start_source_index,
+            ind2=selected_neighbour_ind,
+            projector=projector_away_from_normal_init,
+        )
 
-        direction_0 = vertices[neighbour_ind] - vertices[start_point]
-        direction_0 = direction_0 @ P_norm.T
-        direction_0 = direction_0 / np.linalg.norm(direction_0)
-        d = 2
-        while d <= max_step - 1:
-            neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
-            cs = np.zeros(len(neighbour_step_2))
-            for p in range(len(neighbour_step_2)):
-                direction = vertices[neighbour_step_2[p]] - vertices[neighbour_ind]
-                direction = direction @ P_norm.T
-                direction = direction / np.linalg.norm(direction)
-                cs[p] = direction @ direction_0.T
+        neighbour_i = 2
+        while neighbour_i <= path_length - 1:
+            next_step_neighbour_list = vert_conn[selected_neighbour_ind, :].nonzero()[1]
+            new_direction_closeness = []
+            for candidate_neighbour_ind in range(len(next_step_neighbour_list)):
+                direction = calculate_direction_vector(
+                    vertices=vertices,
+                    ind1=selected_neighbour_ind,
+                    ind2=next_step_neighbour_list[candidate_neighbour_ind],
+                    projector=projector_away_from_normal_init,
+                )
+                new_direction_closeness.append(direction @ direction_vector_init.T)
 
-            csmax_ind = np.argmax(cs)
-            neighbour_ind = neighbour_step_2[csmax_ind]
-            path_indices[n, d] = neighbour_ind
-            d += 1
+            selected_neighbour_ind = next_step_neighbour_list[np.argmax(new_direction_closeness)]
+            template_i.append(selected_neighbour_ind)
+            neighbour_i += 1
 
-    # visualization
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.scatter(vertices[:,0], vertices[:,1], vertices[:,2])
-    # for d in range(0, path_indices.shape[0]):
-    #     ax.scatter(vertices[path_indices[d, :], 0], vertices[path_indices[d, :], 1], vertices[path_indices[d, :], 2], marker = '^')
+        template_path_index_array[direction_i, :] = template_i
 
-    # Activation timeseries
-    x1 = np.linspace(-1, 1, max_step * 2 + 1)
-    x2 = np.linspace(-1, 1, max_step * 2 + 1)
-    A = 1
+    return template_path_index_array
+
+
+def calculate_activation_time_series(
+        total_duration: int, path_length: int = 20, plot_time_series: bool = False
+):
+    x = np.linspace(-1, 1, path_length * 2 + 1)
+    n = len(x)
+    alpha = 1
     sigma = 2
-    g = np.zeros([len(x1), len(x2)])
-    for i in range(1, len(x1)):
-        for j in range(1, len(x2)):
-            g[i, j] = A * np.exp(-(x1[i] ** 2 + x2[j] ** 2) / 2 * sigma ** 2)
-    # plt.figure()
-    # plt.imshow(g)
-    # plt.figure()
-    # plt.plot(g[11, 1:11])
 
-    # ntpoints = int(Fs*duration+1)
-    t = np.linspace(0, 4, T)
+    g = np.zeros([n, n])
+    for i in range(1, n):
+        for j in range(1, n):
+            g[i, j] = alpha * np.exp(-(x[i] ** 2 + x[j] ** 2) / 2 * sigma ** 2)
+
+    th = np.linspace(0, 4, total_duration)
     omega = np.pi / 2
-    h = 0.5 * (1 + np.cos(omega * t))
-    # plt.figure()
-    # plt.plot(t, h)
+    h = 0.5 * (1 + np.cos(omega * th))
 
-    sensor_blob = np.zeros([G.shape[0], T])
-    s = np.zeros([max_step, T])
-    for t in range(T):
-        s[:, t] = np.flip(g[max_step + 1, 1: max_step + 1]) * h[t]
+    s = np.zeros([path_length, total_duration])
+    for t in range(total_duration):
+        s[:, t] = np.flip(g[path_length + 1, 1: path_length + 1]) * h[t]
 
-    # plt.figure()
-    # plt.plot(s.T)
+    if plot_time_series:
+        plt.figure()
+        plt.imshow(g)
 
-    # activations on sensors
-    for d in range(0, num_dir):
-        sensor_blob = sensor_blob + G[:, path_indices[d]] @ s
+        plt.figure()
+        plt.plot(th, h)
 
-    return [sensor_blob, path_indices]
+        plt.figure()
+        plt.plot(s.T)
+
+    return s
+
+
+def project_blob_on_sensors(
+        time_series: np.ndarray,
+        G: np.ndarray,
+        total_duration: int,
+        template_path_index_array: np.ndarray
+):
+    channel_num = G.shape[0]
+    blob_on_sensors = np.zeros([channel_num, total_duration])
+    direction_num = template_path_index_array.shape[0]
+
+    for d in range(direction_num):
+        ind = template_path_index_array[d]
+        blob_on_sensors = blob_on_sensors + G[:, ind] @ time_series
+
+    return blob_on_sensors
+
+
+def create_blob_on_sensors(
+        vertices: np.ndarray,
+        vert_conn: csc.csc_matrix,
+        vert_normals: np.ndarray,
+        G: np.ndarray,
+        start_source_index: int,
+        total_duration: int,
+        path_length: int = 20,
+        plot_time_series: bool = False
+):
+    template_path_index_array = create_template_path_fixed_length(
+        start_source_index=start_source_index,
+        vertices=vertices,
+        vert_conn=vert_conn,
+        vert_normals=vert_normals,
+        path_length=path_length
+    )
+
+    time_series = calculate_activation_time_series(
+        total_duration=total_duration, path_length=path_length, plot_time_series=plot_time_series
+    )
+
+    blob_on_sensors = project_blob_on_sensors(
+        time_series=time_series,
+        G=G,
+        total_duration=total_duration,
+        template_path_index_array=template_path_index_array
+    )
+
+    return blob_on_sensors, template_path_index_array

@@ -36,11 +36,14 @@ def load_input_data(data_dir: str, channel_type: str):
         Sparce smooth cortical model.
     vertices_dense : np.ndarray
         Vertex coordinates for dense model [n_sources_dense x 3].
+    vertices_smooth_dense
     vertices : np.ndarray
         Vertex coordinates for sparse model [n_sources_sparse x 3].
     vertices_smooth
     vert_conn
+    vert_conn_dense
     vert_normals
+    vert_normals_dense
     """
     # Dense cortical grid
     G_dense = scipy.io.loadmat(data_dir + "/G_dense.mat")["G"]
@@ -68,12 +71,20 @@ def load_input_data(data_dir: str, channel_type: str):
     vertices_dense = cortex_dense["Vertices"][0]
     vertices_smooth = cortex_smooth["Vertices"][0]
     assert vertices.shape == vertices_smooth.shape, "smooth cortical model does not correspond to initial model"
+    vertices_smooth_dense = cortex_smooth_dense["Vertices"][0]
+    assert vertices_dense.shape == vertices_smooth_dense.shape, \
+        "dense smooth cortical model does not correspond to initial model"
 
     vert_conn = cortex["VertConn"][0]
     assert vert_conn.shape == (G.shape[1], G.shape[1]), "cortical model does not correspond to forward model"
+    vert_conn_dense = cortex_dense["VertConn"][0]
+    assert vert_conn_dense.shape == (G_dense.shape[1], G_dense.shape[1]), \
+        "dense cortical model does not correspond to dense forward model"
 
     vert_normals = cortex["VertNormals"][0]
     assert vert_normals.shape == vertices.shape, "cortical model is broken"
+    vert_normals_dense = cortex_dense["VertNormals"][0]
+    assert vert_normals_dense.shape == vertices_dense.shape, "dense cortical model is broken"
 
     return (
         G_dense,
@@ -85,6 +96,9 @@ def load_input_data(data_dir: str, channel_type: str):
         vertices,
         vertices_dense,
         vertices_smooth,
+        vertices_smooth_dense,
         vert_conn,
-        vert_normals
+        vert_conn_dense,
+        vert_normals,
+        vert_normals_dense
     )
