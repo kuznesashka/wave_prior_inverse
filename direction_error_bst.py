@@ -106,6 +106,25 @@ def add_brain_noise_to_signal(
     return data
 
 
+def pick_random_source(vertices: np.ndarray, distance_to_midline: float = 0.02) -> int:
+    """Select one random source not closer than `distance_to_midline` (in m) to midline.
+
+    Parameters
+    ----------
+    vertices : np.ndarray
+    distance_to_midline : float
+
+    Returns
+    -------
+    picked_source_ind : int
+    """
+    x_axis = 1
+    far_from_midline_mask = np.abs(vertices[:, x_axis]) >= distance_to_midline
+    sources_far_from_midline = np.where(far_from_midline_mask)[0]
+    picked_source_ind = np.random.choice(sources_far_from_midline)
+    return picked_source_ind
+
+
 def direction_error_bst(
         G: np.ndarray,
         G_dense: np.ndarray,
@@ -124,7 +143,8 @@ def direction_error_bst(
         add_spherical_wave: bool = False,
         plot_wave_time_series: bool = False,
         path_length_for_blob: int = 20,
-        plot_blob_time_series: bool = False
+        plot_blob_time_series: bool = False,
+        distance_to_midline: float = 0.02
 ) -> Tuple:
     """Monte Carlo simulations.
     Function calculates speed and direction error as a function of spatial jitter and SNR.
@@ -150,6 +170,7 @@ def direction_error_bst(
     plot_wave_time_series : bool = False
     path_length_for_blob : int = 20
     plot_blob_time_series : bool = False
+    distance_to_midline : float = 0.02
 
     Returns
     -------
@@ -199,7 +220,8 @@ def direction_error_bst(
             # first `simulation_num` trials are traveling waves
             for simulation_i in range(simulation_num):
                 # random starting source from sparse cortical model
-                starting_source_sparse_list.append(np.random.randint(sparse_source_number))
+                source = pick_random_source(vertices=vertices, distance_to_midline=distance_to_midline)
+                starting_source_sparse_list.append(source)
 
                 # find close sources from dense_model
                 close_source_index_list = find_close_sources(

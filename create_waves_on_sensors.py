@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 def calculate_direction_vector(
-    vertices: np.ndarray, ind1: int, ind2: int, projector: np.ndarray
+        vertices: np.ndarray, ind1: int, ind2: int, projector: np.ndarray
 ) -> np.ndarray:
     """Calculate propagation direction coordinates vector from source with ind1 to source with ind2
     and projected to the plane defined by starting source nearest neighbours.
@@ -33,11 +33,11 @@ def calculate_direction_vector(
 
 
 def create_template_paths(
-    wave_generation_params: Dict[str, Any],
-    start_source_index: int,
-    vertices: np.ndarray,
-    vert_conn: csc.csc_matrix,
-    vert_normals: np.ndarray,
+        wave_generation_params: Dict[str, Any],
+        start_source_index: int,
+        vertices: np.ndarray,
+        vert_conn: csc.csc_matrix,
+        vert_normals: np.ndarray,
 ):
     """Calculate template cortical paths for waves.
     Consider only propagation directions, but not actual propagation speed.
@@ -127,7 +127,7 @@ def create_template_paths(
 
 
 def plot_template_paths(
-    vertices: np.ndarray, template_path_index_array: Dict[int, List[int]]
+        vertices: np.ndarray, template_path_index_array: Dict[int, List[int]]
 ):
     """TBD: Visualize the constructed cortical paths.
 
@@ -152,16 +152,16 @@ def plot_template_paths(
 
 
 def one_step_lower_than_residual(
-    v2: int,
-    G: np.ndarray,
-    vertices: np.ndarray,
-    vertices_smooth: np.ndarray,
-    distance_residual: float,
-    one_step_distance: float,
-    coord_previous: np.ndarray,
-    coord_smooth_previous: np.ndarray,
-    forward_model_previous: np.ndarray,
-    template_path_index_direction_i: List[int],
+        v2: int,
+        G: np.ndarray,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        distance_residual: float,
+        one_step_distance: float,
+        coord_previous: np.ndarray,
+        coord_smooth_previous: np.ndarray,
+        forward_model_previous: np.ndarray,
+        template_path_index_direction_i: List[int],
 ):
     """Update wave path parameters after one step in case
     that one step distance is lower than the residual distance to the next source.
@@ -208,11 +208,11 @@ def one_step_lower_than_residual(
 
 
 def one_step_higher_than_distance_to_next_source(
-    v1: int,
-    v2: int,
-    one_step_distance: float,
-    distance_to_go: float,
-    distance_to_next_source_direction_i: List[float],
+        v1: int,
+        v2: int,
+        one_step_distance: float,
+        distance_to_go: float,
+        distance_to_next_source_direction_i: List[float],
 ):
     """Update wave path parameters after one step in case
     that one step distance is higher than the residual distance to the next source.
@@ -242,15 +242,15 @@ def one_step_higher_than_distance_to_next_source(
 
 
 def one_step_higher_than_residual(
-    v1: int,
-    v2: int,
-    G: np.ndarray,
-    vertices: np.ndarray,
-    vertices_smooth: np.ndarray,
-    distance_residual: float,
-    one_step_distance: float,
-    template_path_index_direction_i: List[int],
-    distance_to_next_source_direction_i: List[float],
+        v1: int,
+        v2: int,
+        G: np.ndarray,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        distance_residual: float,
+        one_step_distance: float,
+        template_path_index_direction_i: List[int],
+        distance_to_next_source_direction_i: List[float],
 ):
     """
 
@@ -340,12 +340,12 @@ def one_step_higher_than_residual(
 
 
 def one_step_equals_to_residual(
-    v1: int,
-    v2: int,
-    G: np.ndarray,
-    vertices: np.ndarray,
-    vertices_smooth: np.ndarray,
-    template_path_index_direction_i: List[int],
+        v1: int,
+        v2: int,
+        G: np.ndarray,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        template_path_index_direction_i: List[int],
 ):
     """
 
@@ -374,13 +374,13 @@ def one_step_equals_to_residual(
 
 
 def create_wave_cortical_paths(
-    template_path_index_array: Dict[int, List[int]],
-    distance_to_next_source: Dict[int, List[int]],
-    wave_generation_params: Dict[str, Any],
-    start_source_index: int,
-    vertices: np.ndarray,
-    vertices_smooth: np.ndarray,
-    G: np.ndarray,
+        template_path_index_array: Dict[int, List[int]],
+        distance_to_next_source: Dict[int, List[int]],
+        wave_generation_params: Dict[str, Any],
+        start_source_index: int,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        G: np.ndarray,
 ):
     """Calculate actual wave paths considering the speed values.
 
@@ -529,7 +529,7 @@ def create_wave_cortical_paths(
 
 
 def create_time_series_for_waves(
-    wave_generation_params: Dict[str, Any], plot_time_series: bool = False
+        wave_generation_params: Dict[str, Any], plot_time_series: bool = False
 ):
     """Calculate time series vectors for waves.
 
@@ -583,12 +583,12 @@ def create_time_series_for_waves(
 
 
 def project_wave_on_sensors(
-    wave_time_series,
-    wave_generation_params,
-    add_spherical_wave,
-    propagation_direction_num,
-    channels_num,
-    forward_model_updated,
+        wave_time_series,
+        wave_generation_params,
+        add_spherical_wave,
+        propagation_direction_num,
+        channels_num,
+        forward_model_updated,
 ):
     """
 
@@ -644,15 +644,15 @@ def project_wave_on_sensors(
 
 
 def create_waves_on_sensors(
-    vertices: np.ndarray,
-    vertices_smooth: np.ndarray,
-    vert_conn: csc.csc_matrix,
-    vert_normals: np.ndarray,
-    G: np.ndarray,
-    wave_generation_params: Dict[str, Any],
-    start_source_index: int,
-    add_spherical_wave: bool = False,
-    plot_time_series: bool = False,
+        vertices: np.ndarray,
+        vertices_smooth: np.ndarray,
+        vert_conn: csc.csc_matrix,
+        vert_normals: np.ndarray,
+        G: np.ndarray,
+        wave_generation_params: Dict[str, Any],
+        start_source_index: int,
+        add_spherical_wave: bool = False,
+        plot_time_series: bool = False,
 ):
     """Create basis wave set.
 

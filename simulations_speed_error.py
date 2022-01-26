@@ -1,25 +1,27 @@
 from create_waves_on_sensors import create_waves_on_sensors
 from generate_brain_noise import generate_brain_noise
-from LASSO_inverse_solve import LASSO_inverse_solve
+from LASSO_inverse_solve import lasso_inverse_solve
 import scipy.io
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 def simulations_speed_error(data_dir, channel_type, params, snr, num_sim=100):
-    """Function to run Monte Carlo simulations without spatial jitter and control only speed detection error
+    """Function to run Monte Carlo simulations without spatial jitter and control only speed detection error.
+
     Parameters
     ----------
     data_dir : str
-        Data directory with G.mat and cortex.mat
+        Data directory with G.mat and cortex.mat.
     channel_type : str
-        Type of channels used 'grad' or 'mag'
+        Type of channels used 'grad' or 'mag'.
     params : dict
-        Wave modeling parameters
+        Wave modeling parameters.
     snr : list
-        List with all considered snr values
+        List with all considered snr values.
     num_sim : int
-        Number of simulations for one class
+        Number of simulations for one class.
+
     Returns
     -------
     auc : AUC values for all snr levels
@@ -27,7 +29,6 @@ def simulations_speed_error(data_dir, channel_type, params, snr, num_sim=100):
     direction_error : 1-correlation between generated and detected directions
     ROC curve plot, Error plots
     """
-
     # uploading only dense forward model and cortical model
     G_dense_raw = scipy.io.loadmat(data_dir + "/G_medium.mat")
     cortex_dense_raw = scipy.io.loadmat(data_dir + "/cortex_medium.mat")
@@ -73,7 +74,7 @@ def simulations_speed_error(data_dir, channel_type, params, snr, num_sim=100):
         )  # true starting source from the dense model
         brain_noise_norm = np.zeros([G_dense.shape[0], T, num_sim])  # brain noise array
 
-        for sim_n in range(0, num_sim):
+        for sim_n in range(num_sim):
             src_idx_dense[sim_n] = np.random.randint(
                 0, G_dense.shape[1]
             )  # random starting source from dense cortical model
@@ -119,7 +120,7 @@ def simulations_speed_error(data_dir, channel_type, params, snr, num_sim=100):
                 best_coefs,
                 best_shift,
                 speed_estim[k, sim_n],
-            ] = LASSO_inverse_solve(data, sensor_waves, False)
+            ] = lasso_inverse_solve(data, sensor_waves, False)
             print(sim_n)
 
         k += 1

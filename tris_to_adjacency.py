@@ -3,13 +3,14 @@ from scipy import sparse
 
 
 def tris_to_adjacency(trimesh, n):
-    """Function to transform trimeshs from grid to adjacency matrix
+    """Function to transform trimesh from grid to adjacency matrix.
+
     Parameters
     ----------
-    trimesh : numpy.ndarray
-        Triads of vertices from the cortical model
+    trimesh : np.ndarray
+        Triads of vertices from the cortical model.
     n : int
-        Number of sources in model
+        Number of sources in model.
 
     Returns
     -------

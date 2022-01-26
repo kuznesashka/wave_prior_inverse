@@ -1,4 +1,8 @@
-from direction_error_bst import direction_error_bst, plot_roc, plot_direction_estimation_error, plot_speed_estimation_error
+from direction_error_bst import \
+    direction_error_bst, \
+    plot_roc, \
+    plot_direction_estimation_error, \
+    plot_speed_estimation_error
 from load_input_data import load_input_data
 from create_waves_on_sensors import create_waves_on_sensors
 
@@ -10,7 +14,7 @@ wave_generation_params = {
 }
 
 data_dir = '/Users/kotkartoshka/Documents/wave_prior_data'
-snr_list = [1, 2, 3]
+snr_list = [3]
 spatial_jitter_list = [0]
 channel_type = "grad"
 simulation_num = 300
@@ -57,7 +61,8 @@ simulation_num = 300
     add_spherical_wave=False,
     plot_wave_time_series=False,
     path_length_for_blob=20,
-    plot_blob_time_series=False
+    plot_blob_time_series=False,
+    distance_to_midline=0.02
 )
 
 plot_roc(
