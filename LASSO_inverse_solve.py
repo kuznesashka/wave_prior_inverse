@@ -93,8 +93,13 @@ def lasso_inverse_solve(
             regression.fit(wave_speed_vec.T, signal_vec)
             reg_coefs_array[w, s, :] = regression.coef_
             reg_intercept_array[w, s] = regression.intercept_
-            reg_score_array[w, s] = regression.score(wave_speed_vec.T, signal_vec)
             y_pred[w, s, :] = regression.predict(wave_speed_vec.T)
+            if fit_intercept:
+                reg_score_array[w, s] = regression.score(wave_speed_vec.T, signal_vec)
+            else:
+                tss = sum(signal_vec ** 2)
+                rss = sum((signal_vec - y_pred[w, s, :]) ** 2)
+                reg_score_array[w, s] = 1 - rss / tss
 
     solution_speed_ind, solution_shift_ind, solution_score = define_best_solution(
         reg_score_array=reg_score_array,

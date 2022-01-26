@@ -1,5 +1,5 @@
-from direction_error_bst import \
-    direction_error_bst, \
+from simulations import \
+    calculate_direction_speed_error, \
     plot_roc, \
     plot_direction_estimation_error, \
     plot_speed_estimation_error
@@ -17,7 +17,7 @@ data_dir = '/Users/kotkartoshka/Documents/wave_prior_data'
 snr_list = [3]
 spatial_jitter_list = [0]
 channel_type = "grad"
-simulation_num = 500
+simulation_num = 100
 
 (
     G_dense,
@@ -43,7 +43,8 @@ simulation_num = 500
     direction_error_pca,
     speed_simulated_array,
     speed_estimated_array,
-) = direction_error_bst(
+    spatial_error
+) = calculate_direction_speed_error(
     G=G,
     G_dense=G_dense,
     vertices=vertices,
@@ -62,7 +63,8 @@ simulation_num = 500
     plot_wave_time_series=False,
     path_length_for_blob=20,
     plot_blob_time_series=False,
-    distance_to_midline=0.02
+    distance_to_midline=0.02,
+    lasso_fit_intercept=True
 )
 
 plot_roc(
@@ -84,7 +86,6 @@ plot_speed_estimation_error(
     spatial_jitter_list=spatial_jitter_list,
     speed_simulated_array=speed_simulated_array,
     speed_estimated_array=speed_estimated_array,
-    simulation_num=simulation_num,
     wave_generation_params=wave_generation_params
 )
 

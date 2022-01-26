@@ -125,7 +125,34 @@ def pick_random_source(vertices: np.ndarray, distance_to_midline: float = 0.02) 
     return picked_source_ind
 
 
-def direction_error_bst(
+def pick_source_counterpart(
+        vertices,
+        vertices_dense,
+        source_index,
+        spatial_jitter
+):
+    # find close sources from dense_model
+    close_source_index_list = find_close_sources(
+        source_index=source_index,
+        vertices=vertices,
+        vertices_dense=vertices_dense,
+        spatial_jitter=spatial_jitter,
+        area_radius=0.003,
+    )
+
+    if close_source_index_list.size == 0:
+        return -1, -1
+
+    # pick randomly new starting source from close sources of dense model
+    starting_source_dense = np.random.choice(close_source_index_list)
+    spatial_error = np.linalg.norm(
+        vertices_dense[starting_source_dense]
+        - vertices[source_index]
+    )
+    return starting_source_dense, spatial_error
+
+
+def calculate_direction_speed_error(
         G: np.ndarray,
         G_dense: np.ndarray,
         vertices: np.ndarray,
@@ -144,7 +171,8 @@ def direction_error_bst(
         plot_wave_time_series: bool = False,
         path_length_for_blob: int = 20,
         plot_blob_time_series: bool = False,
-        distance_to_midline: float = 0.02
+        distance_to_midline: float = 0.02,
+        lasso_fit_intercept: bool = False
 ) -> Tuple:
     """Monte Carlo simulations.
     Function calculates speed and direction error as a function of spatial jitter and SNR.
@@ -171,6 +199,7 @@ def direction_error_bst(
     path_length_for_blob : int = 20
     plot_blob_time_series : bool = False
     distance_to_midline : float = 0.02
+    lasso_fit_intercept : bool = False
 
     Returns
     -------
@@ -180,11 +209,12 @@ def direction_error_bst(
     direction_error_pca : np.ndarray
     speed_simulated_array : np.ndarray
     speed_estimated_array : np.ndarray
+    spatial_error : np.ndarray
     """
     speed_number = len(wave_generation_params["speeds"])
-
-    # wave duration in ms
-    total_duration = int(wave_generation_params["duration"] * wave_generation_params["Fs"] + 1) * 2
+    duration_sec = wave_generation_params["duration"]
+    sampling_frequency = wave_generation_params["Fs"]
+    total_duration = int(duration_sec * sampling_frequency + 1) * 2  # wave duration (time samples)
 
     spatial_jitter_num = len(spatial_jitter_list)
     snr_num = len(snr_list)
@@ -193,6 +223,7 @@ def direction_error_bst(
     speed_simulated_array = np.zeros([spatial_jitter_num, snr_num, simulation_num], dtype=int)
     speed_estimated_array = np.zeros([spatial_jitter_num, snr_num, simulation_num], dtype=int)
 
+    direction_simulated_array = np.zeros([spatial_jitter_num, snr_num, simulation_num], dtype=int)
     direction_error = np.zeros([spatial_jitter_num, snr_num, simulation_num])
     direction_error_smooth = np.zeros([spatial_jitter_num, snr_num, simulation_num])
     direction_error_pca = np.zeros([spatial_jitter_num, snr_num, simulation_num])
@@ -208,38 +239,31 @@ def direction_error_bst(
             # true starting source from the dense model
             starting_source_dense_list = []
             # R-squared values for all simulations
-            r_squared_per_simulation = []
+            r_squared_per_wave_simulation = []
+            r_squared_per_blob_simulation = []
 
             direction_simulated = np.zeros([simulation_num, 3])
             direction_simulated_smooth = np.zeros([simulation_num, 3])
             direction_simulated_pca = np.zeros([simulation_num, 3])
 
-            brain_noise_array = np.zeros([G_dense.shape[0], total_duration, simulation_num])
-
-            # first `simulation_num` trials are traveling waves
             for simulation_i in range(simulation_num):
                 # random starting source from sparse cortical model
                 source = pick_random_source(vertices=vertices, distance_to_midline=distance_to_midline)
                 starting_source_sparse_list.append(source)
 
-                # find close sources from dense_model
-                close_source_index_list = find_close_sources(
-                    source_index=starting_source_sparse_list[simulation_i],
+                # pick randomly new starting source from close sources of dense model
+                source_dense, error = pick_source_counterpart(
                     vertices=vertices,
                     vertices_dense=vertices_dense,
-                    spatial_jitter=spatial_jitter,
-                    area_radius=0.003,
+                    source_index=starting_source_sparse_list[simulation_i],
+                    spatial_jitter=spatial_jitter
                 )
 
-                if close_source_index_list.size == 0:
+                if source_dense == -1:
                     continue
 
-                # pick randomly new starting source from close sources of dense model
-                starting_source_dense_list.append(np.random.choice(close_source_index_list))
-                spatial_error[spatial_jitter_i, snr_i, simulation_i] = np.linalg.norm(
-                    vertices_dense[starting_source_dense_list[simulation_i]]
-                    - vertices[starting_source_sparse_list[simulation_i]]
-                )
+                starting_source_dense_list.append(source_dense)
+                spatial_error[spatial_jitter_i, snr_i, simulation_i] = error
 
                 # calculate true traveling wave set on dense cortical grid
                 (
@@ -265,6 +289,8 @@ def direction_error_bst(
 
                 direction_number = waves_on_sensors.shape[0]
                 direction_simulated_index = np.random.randint(direction_number)
+                direction_simulated_array[spatial_jitter_i, snr_i, simulation_i] = direction_simulated_index
+
                 direction_simulated[simulation_i, :] = (
                     propagation_direction_list[direction_simulated_index, speed_simulated_index, :]
                 )
@@ -278,13 +304,11 @@ def direction_error_bst(
                 )
 
                 wave_selected = waves_on_sensors[direction_simulated_index, speed_simulated_index, :, :]
-                brain_noise_array[:, :, simulation_i] = generate_brain_noise(
-                    G=G_dense, time_point_number=total_duration
-                )
+                brain_noise = generate_brain_noise(G=G_dense, time_point_number=total_duration)
 
-                data = add_brain_noise_to_signal(
+                data_wave = add_brain_noise_to_signal(
                     signal_on_sensors=wave_selected,
-                    brain_noise=brain_noise_array[:, :, simulation_i],
+                    brain_noise=brain_noise,
                     snr=snr,
                 )
 
@@ -308,9 +332,10 @@ def direction_error_bst(
                 )
 
                 score, speed_estimated_index, _, coefficients, _ = lasso_inverse_solve(
-                    signal_data=data, wave_data=waves_on_sensors, fit_intercept=False
+                    signal_data=data_wave, wave_data=waves_on_sensors, fit_intercept=lasso_fit_intercept
                 )
-                r_squared_per_simulation.append(score)
+
+                r_squared_per_wave_simulation.append(score)
                 speed_estimated_array[spatial_jitter_i, snr_i, simulation_i] = speed_estimated_index
 
                 # calculate direction error
@@ -343,52 +368,33 @@ def direction_error_bst(
                     direction_generated=direction_pca_generated,
                 )
 
-                print(
-                    f"{simulation_i + 1} out of {simulation_num} completed (trials with waves)"
-                )
-
-            # next `simulation_num` trials are static oscillating blobs
-            for simulation_i in range(simulation_num, 2 * simulation_num):
-                starting_source_dense_index = starting_source_dense_list[simulation_i - simulation_num]
-                starting_source_sparse_index = starting_source_sparse_list[simulation_i - simulation_num]
-
                 oscillating_blob_on_sensors, _ = create_blob_on_sensors(
                     vertices=vertices_dense,
                     vert_conn=vert_conn_dense,
                     vert_normals=vert_normals_dense,
                     G=G_dense,
-                    start_source_index=starting_source_dense_index,
+                    start_source_index=source_dense,
                     total_duration=total_duration,
                     path_length=path_length_for_blob,
                     plot_time_series=plot_blob_time_series
                 )
 
-                data = add_brain_noise_to_signal(
+                data_blob = add_brain_noise_to_signal(
                     signal_on_sensors=oscillating_blob_on_sensors,
-                    brain_noise=brain_noise_array[:, :, simulation_i - simulation_num],
+                    brain_noise=brain_noise,
                     snr=snr,
                 )
 
-                waves_on_sensors, *_ = create_waves_on_sensors(
-                    vertices=vertices,
-                    vertices_smooth=vertices_smooth,
-                    vert_conn=vert_conn,
-                    vert_normals=vert_normals,
-                    G=G,
-                    wave_generation_params=wave_generation_params,
-                    start_source_index=starting_source_sparse_index,
-                    add_spherical_wave=add_spherical_wave,
-                    plot_time_series=plot_wave_time_series,
+                score, *_ = lasso_inverse_solve(
+                    signal_data=data_blob, wave_data=waves_on_sensors, fit_intercept=lasso_fit_intercept
                 )
-
-                score, *_ = lasso_inverse_solve(signal_data=data, wave_data=waves_on_sensors, fit_intercept=False)
-                r_squared_per_simulation.append(score)
+                r_squared_per_blob_simulation.append(score)
 
                 print(
-                    f"{simulation_i - simulation_num + 1} out of {simulation_num} completed (trials w/o waves)"
+                    f"{simulation_i + 1} out of {simulation_num} completed"
                 )
 
-            y_score = r_squared_per_simulation
+            y_score = r_squared_per_wave_simulation + r_squared_per_blob_simulation
             fpr, tpr, _ = metrics.roc_curve(y_true, y_score)
             roc_parameters[(spatial_jitter, snr)]["fpr"] = fpr
             roc_parameters[(spatial_jitter, snr)]["tpr"] = tpr
@@ -401,6 +407,7 @@ def direction_error_bst(
         direction_error_pca,
         speed_simulated_array,
         speed_estimated_array,
+        spatial_error
     )
 
 
