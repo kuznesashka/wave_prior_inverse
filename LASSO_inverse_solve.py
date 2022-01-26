@@ -113,4 +113,3 @@ def plot_data_predicted(signal_vec, y_pred, solution_shift_ind, solution_speed_i
     plt.plot(signal_vec)
     plt.plot(y_pred[solution_shift_ind, solution_speed_ind, :])
     plt.title(['R-squared = ', str(solution_score)])
-

@@ -185,7 +185,7 @@ def one_step_lower_than_residual(
     coord_smooth_previous : np.ndarray
         Coordinates of the previous point on the path (smooth cortical model).
     forward_model_previous : np.ndarray
-        Updated forward model vector for the prevoius point on the path.
+        Updated forward model vector for the previous point on the path.
     template_path_index_direction_i : List[int]
         Indices of sources forming the path to the i-th direction.
 

@@ -17,7 +17,7 @@ data_dir = '/Users/kotkartoshka/Documents/wave_prior_data'
 snr_list = [3]
 spatial_jitter_list = [0]
 channel_type = "grad"
-simulation_num = 300
+simulation_num = 500
 
 (
     G_dense,

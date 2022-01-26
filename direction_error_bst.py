@@ -181,7 +181,6 @@ def direction_error_bst(
     speed_simulated_array : np.ndarray
     speed_estimated_array : np.ndarray
     """
-    sparse_source_number = G.shape[1]
     speed_number = len(wave_generation_params["speeds"])
 
     # wave duration in ms
@@ -490,7 +489,6 @@ def plot_speed_estimation_error(
         spatial_jitter_list: List[float],
         speed_simulated_array: np.ndarray,
         speed_estimated_array: np.ndarray,
-        simulation_num: int,
         wave_generation_params: Dict[str, Any],
 ):
     """Visualize error in speed estimation for different spatial jitters and SNRs.
@@ -501,12 +499,12 @@ def plot_speed_estimation_error(
     spatial_jitter_list : List[float]
     speed_simulated_array : np.ndarray
     speed_estimated_array : np.ndarray
-    simulation_num : int
     wave_generation_params : Dict[str, Any]
     """
     speed_list = wave_generation_params["speeds"]
     spatial_jitter_num = len(spatial_jitter_list)
     snr_num = len(snr_list)
+    simulation_num = speed_simulated_array.shape[2]
 
     plt.figure()
     k = 1

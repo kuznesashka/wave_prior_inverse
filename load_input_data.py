@@ -24,7 +24,7 @@ def load_input_data(data_dir: str, channel_type: str):
         Forward operator for dense cortical model [n_channels x n_sources_dense].
         Source orientation is fixed.
     G : np.ndarray
-        Forward operator for sparce cortical model [n_channels x n_sources_sparse].
+        Forward operator for sparse cortical model [n_channels x n_sources_sparse].
         Source orientation is fixed.
     cortex_dense : np.ndarray
         Dense cortical model.
@@ -33,7 +33,7 @@ def load_input_data(data_dir: str, channel_type: str):
     cortex_smooth_dense : np.ndarray
         Dense smooth cortical model.
     cortex_smooth : np.ndarray
-        Sparce smooth cortical model.
+        Sparse smooth cortical model.
     vertices_dense : np.ndarray
         Vertex coordinates for dense model [n_sources_dense x 3].
     vertices_smooth_dense
