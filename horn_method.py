@@ -3,20 +3,21 @@ import numpy as np
 
 def horn_method(p, q):
     """Function to compute the transformation between set of points in 3d space using Horn
-    method (Horn, 1987)
-       Parameters
-       ----------
-       p : nd.array
-           coordinates of first set of point in 3d
-       q : nd.array
-           coordinates of the second set of points in 3d
-       Returns
-       -------
-       R: rotation matrix
-       s: the overall scaling factor
-       t: translation vector
-    """
+    method (Horn, 1987).
 
+    Parameters
+    ----------
+    p : np.ndarray
+       Coordinates of the first point set in 3d.
+    q : np.ndarray
+       Coordinates of the second point set in 3d.
+
+    Returns
+    -------
+    R: rotation matrix
+    s: the overall scaling factor
+    t: translation vector
+    """
     ss = np.sum(p * q, axis=0)
     sxy = np.sum(p[:, 0] * q[:, 1])
     syx = np.sum(p[:, 1] * q[:, 0])

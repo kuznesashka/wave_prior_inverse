@@ -1,114 +1,82 @@
 import mne
 import numpy as np
 import matplotlib.pyplot as plt
-
-# from automatic detection
-fname = "/home/ksasha/Projects/ASPIRE_project/MEG_data/B1C2/B1C2_ii_run1_raw_tsss_mc_art_corr.fif"  # path to MEG
-
-Data = mne.io.read_raw_fif(fname)  # upload the data
-tmin = 0
-tmax = min(600, (Data[0][0].shape[1] - 1) / 1000)
-Data.crop(tmin, tmax).load_data()
-
-picks = mne.pick_types(Data.info, meg="grad", exclude="bads")
-
-Data.filter(1, 200, fir_design="firwin")
-Data.notch_filter(50, filter_length="auto", phase="zero")
-
-spike_ind = np.loadtxt("index.csv", delimiter=",")
-F = Data.get_data(picks=picks)
-
-spike_ind = spike_ind[spike_ind > 60].astype(int)
-snr = np.zeros(len(spike_ind))
-for i in range(0, len(spike_ind)):
-    spike = F[:, (spike_ind[i] - 20) : (spike_ind[i] + 20)]
-    signal_norm = np.linalg.norm(spike)
-    noise_before = np.arange((spike_ind[i] - 60), (spike_ind[i] - 20))
-    noise_after = np.arange((spike_ind[i] + 20), (spike_ind[i] + 60))
-    if len(np.intersect1d(noise_before, spike_ind)) == 0:
-        noise = F[:, noise_before]
-    elif len(np.intersect1d(noise_after, spike_ind)) == 0:
-        noise = F[:, noise_after]
-    else:
-        continue
-    noise_norm = np.linalg.norm(noise)
-    snr[i] = signal_norm / noise_norm
-
-plt.figure()
-plt.hist(snr)
-plt.xlabel("SNR")
-plt.title(["Real spikes SNR, grads, total number", len(spike_ind)])
-
-# from manual detection
-
-fname = "/home/ksasha/Projects/Epilepsy/OBir/sleep_raw_tsss.fif"  # path to MEG
-
-Data = mne.io.read_raw_fif(fname)  # upload the first 10 minutes of data
-tmin = 0
-tmax = min(600, (Data[0][0].shape[1] - 1) / 1000)
-Data.crop(tmin, tmax).load_data()
-
-Data.filter(1, 200, fir_design="firwin")
-Data.notch_filter(50, filter_length="auto", phase="zero")
-
-spike_ind = np.loadtxt(
-    "/home/ksasha/Projects/Epilepsy/OBir/OBir_sleep_manual_2705_added.csv",
-    delimiter=",",
-)
-
-picks = mne.pick_types(Data.info, meg="grad", exclude="bads")
-F = Data.get_data(picks=picks)
-
-# all channels
-spike_ind = spike_ind[spike_ind > 60].astype(int)
-snr = np.zeros(len(spike_ind))
-for i in range(0, len(spike_ind)):
-    spike = F[:, (spike_ind[i] - 20) : (spike_ind[i] + 20)]
-    signal_norm = np.linalg.norm(spike)
-    noise_before = np.arange((spike_ind[i] - 60), (spike_ind[i] - 20))
-    noise_after = np.arange((spike_ind[i] + 20), (spike_ind[i] + 60))
-    if len(np.intersect1d(noise_before, spike_ind)) == 0:
-        noise = F[:, noise_before]
-    elif len(np.intersect1d(noise_after, spike_ind)) == 0:
-        noise = F[:, noise_after]
-    else:
-        continue
-    noise_norm = np.linalg.norm(noise)
-    snr[i] = signal_norm / noise_norm
-
-plt.figure()
-plt.hist(snr)
-plt.xlabel("SNR")
-plt.title(["Manually detected spikes SNR, mags, total number", len(spike_ind)])
+from typing import List, Optional
 
 
-# only 10 high amplitude channels
-spike_ind = spike_ind[spike_ind > 60].astype(int)
-snr = np.zeros(len(spike_ind))
-for i in range(0, len(spike_ind)):
-    spike = F[:, (spike_ind[i] - 20) : (spike_ind[i] + 20)]
-    indmax = np.flip(np.argsort(np.abs(spike[:, 21])))[0:10]
+def calculate_snr_from_real_spikes(
+        meg_file_name: str,
+        spike_index_list,
+        number_of_high_amplitude_channels: Optional[int] = None,
+        t_min: int = 0,
+        t_max: int = 600,
+        sampling_frequency: int = 1000,
+        channel_type: str = "grad",
+        freq_low: int = 1,
+        freq_high: int = 200,
+        freq_notch: int = 50,
+        spike_window: int = 20,
+        noise_window: int = 60,
+):
+    meg_data = mne.io.read_raw_fif(meg_file_name)
+    total_duration_ms = meg_data[0][0].shape[1]
+    t_max = min(t_max, (total_duration_ms - 1) / sampling_frequency)
+    meg_data.crop(t_min, t_max).load_data()
 
-    signal_norm = np.linalg.norm(spike[indmax, :])
-    noise_before = np.arange((spike_ind[i] - 60), (spike_ind[i] - 20))
-    noise_after = np.arange((spike_ind[i] + 20), (spike_ind[i] + 60))
-    if len(np.intersect1d(noise_before, spike_ind)) == 0:
-        noise = F[indmax, :]
-        noise = noise[:, noise_before]
-    elif len(np.intersect1d(noise_after, spike_ind)) == 0:
-        noise = F[indmax, :]
-        noise = noise[:, noise_after]
-    else:
-        continue
-    noise_norm = np.linalg.norm(noise)
-    snr[i] = signal_norm / noise_norm
+    selected_channels = mne.pick_types(meg_data.info, meg=channel_type, exclude="bads")
 
-plt.figure()
-plt.hist(snr)
-plt.xlabel("SNR")
-plt.title(
-    [
-        "Manually detected spikes SNR, grads, 10 channels with the highest amp, total number of spikes",
-        len(spike_ind),
-    ]
-)
+    meg_data.filter(freq_low, freq_high, fir_design="firwin")
+    meg_data.notch_filter(freq_notch, filter_length="auto", phase="zero")
+    meg_data_filtered = meg_data.get_data(picks=selected_channels)
+
+    spike_index_list = spike_index_list[spike_index_list > 60].astype(int)
+    number_of_high_amplitude_channels = number_of_high_amplitude_channels or meg_data_filtered.shape[0]
+
+    snr_estimated = []
+    for spike_i in spike_index_list:
+        spike_signal = meg_data_filtered[:, (spike_i - spike_window):(spike_i + spike_window)]
+        max_amplitude_channels_ind = (
+            np.flip(np.argsort(np.abs(spike_signal[:, spike_window + 1])))[:number_of_high_amplitude_channels]
+        )
+        spike_signal_norm = np.linalg.norm(spike_signal[max_amplitude_channels_ind, :])
+        noise_before = np.arange(spike_i - noise_window, spike_i - spike_window)
+        noise_after = np.arange(spike_i + spike_window, spike_i + noise_window)
+        noise = meg_data_filtered[max_amplitude_channels_ind, :]
+        if len(np.intersect1d(noise_before, spike_i)) == 0:
+            noise = noise[:, noise_before]
+        elif len(np.intersect1d(noise_after, spike_i)) == 0:
+            noise = noise[:, noise_after]
+        else:
+            continue
+        noise_norm = np.linalg.norm(noise)
+        snr_estimated.append(spike_signal_norm / noise_norm)
+    return snr_estimated
+
+
+def plot_real_spike_snr(snr_estimated: List[float], channel_type: str = "grad"):
+    plt.figure()
+    plt.hist(snr_estimated)
+    plt.xlabel("SNR")
+    plt.title(f"Real spikes SNR, {channel_type}, total spikes number = {len(snr_estimated)}")
+
+
+def estimate_real_snr():
+    # spikes detected automatically
+    meg_file_name = "/home/ksasha/Projects/ASPIRE_project/MEG_data/B1C2/B1C2_ii_run1_raw_tsss_mc_art_corr.fif"
+    spike_index_list = np.loadtxt("index.csv", delimiter=",")
+    snr_estimated = calculate_snr_from_real_spikes(
+        meg_file_name=meg_file_name, spike_index_list=spike_index_list
+    )
+    plot_real_spike_snr(snr_estimated=snr_estimated)
+
+    # spikes detected manually
+    meg_file_name = "/home/ksasha/Projects/Epilepsy/OBir/sleep_raw_tsss.fif"
+    spike_index_list = np.loadtxt(
+        "/home/ksasha/Projects/Epilepsy/OBir/OBir_sleep_manual_2705_added.csv",
+        delimiter=",",
+    )
+    snr_estimated = calculate_snr_from_real_spikes(
+        meg_file_name=meg_file_name, spike_index_list=spike_index_list
+    )
+    plot_real_spike_snr(snr_estimated=snr_estimated)
+
