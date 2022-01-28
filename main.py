@@ -17,7 +17,7 @@ data_dir = '/Users/kotkartoshka/Documents/wave_prior_data'
 snr_list = [3]
 spatial_jitter_list = [0]
 channel_type = "grad"
-simulation_num = 100
+simulation_num = 10
 
 (
     G_dense,
@@ -38,6 +38,7 @@ simulation_num = 100
 
 (
     roc_parameters,
+    direction_simulated_array,
     direction_error,
     direction_error_smooth,
     direction_error_pca,
@@ -64,7 +65,7 @@ simulation_num = 100
     path_length_for_blob=20,
     plot_blob_time_series=False,
     distance_to_midline=0.02,
-    lasso_fit_intercept=True
+    lasso_fit_intercept=False
 )
 
 plot_roc(

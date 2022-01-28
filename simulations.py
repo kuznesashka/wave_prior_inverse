@@ -204,6 +204,7 @@ def calculate_direction_speed_error(
     Returns
     -------
     roc_parameters : Dict[int, Any]
+    direction_simulated_array : np.ndarray
     direction_error : np.ndarray
     direction_error_smooth : np.ndarray
     direction_error_pca : np.ndarray
@@ -211,6 +212,8 @@ def calculate_direction_speed_error(
     speed_estimated_array : np.ndarray
     spatial_error : np.ndarray
     """
+    channel_num = G.shape[0]
+
     speed_number = len(wave_generation_params["speeds"])
     duration_sec = wave_generation_params["duration"]
     sampling_frequency = wave_generation_params["Fs"]
@@ -245,6 +248,9 @@ def calculate_direction_speed_error(
             direction_simulated = np.zeros([simulation_num, 3])
             direction_simulated_smooth = np.zeros([simulation_num, 3])
             direction_simulated_pca = np.zeros([simulation_num, 3])
+
+            data_wave = np.zeros([simulation_num, channel_num, total_duration])
+            data_blob = np.zeros([simulation_num, channel_num, total_duration])
 
             for simulation_i in range(simulation_num):
                 # random starting source from sparse cortical model
@@ -306,7 +312,7 @@ def calculate_direction_speed_error(
                 wave_selected = waves_on_sensors[direction_simulated_index, speed_simulated_index, :, :]
                 brain_noise = generate_brain_noise(G=G_dense, time_point_number=total_duration)
 
-                data_wave = add_brain_noise_to_signal(
+                data_wave[simulation_i, :, :] = add_brain_noise_to_signal(
                     signal_on_sensors=wave_selected,
                     brain_noise=brain_noise,
                     snr=snr,
@@ -332,7 +338,9 @@ def calculate_direction_speed_error(
                 )
 
                 score, speed_estimated_index, _, coefficients, _ = lasso_inverse_solve(
-                    signal_data=data_wave, wave_data=waves_on_sensors, fit_intercept=lasso_fit_intercept
+                    signal_data=data_wave[simulation_i, :, :],
+                    wave_data=waves_on_sensors,
+                    fit_intercept=lasso_fit_intercept
                 )
 
                 r_squared_per_wave_simulation.append(score)
@@ -379,14 +387,16 @@ def calculate_direction_speed_error(
                     plot_time_series=plot_blob_time_series
                 )
 
-                data_blob = add_brain_noise_to_signal(
+                data_blob[simulation_i, :, :] = add_brain_noise_to_signal(
                     signal_on_sensors=oscillating_blob_on_sensors,
                     brain_noise=brain_noise,
                     snr=snr,
                 )
 
                 score, *_ = lasso_inverse_solve(
-                    signal_data=data_blob, wave_data=waves_on_sensors, fit_intercept=lasso_fit_intercept
+                    signal_data=data_blob[simulation_i, :, :],
+                    wave_data=waves_on_sensors,
+                    fit_intercept=lasso_fit_intercept
                 )
                 r_squared_per_blob_simulation.append(score)
 
@@ -396,12 +406,18 @@ def calculate_direction_speed_error(
 
             y_score = r_squared_per_wave_simulation + r_squared_per_blob_simulation
             fpr, tpr, _ = metrics.roc_curve(y_true, y_score)
+            roc_parameters[(spatial_jitter, snr)]["data_blob"] = data_blob
+            roc_parameters[(spatial_jitter, snr)]["data_wave"] = data_wave
+            roc_parameters[(spatial_jitter, snr)]["start_sparse"] = starting_source_sparse_list
+            roc_parameters[(spatial_jitter, snr)]["start_dense"] = starting_source_dense_list
+            roc_parameters[(spatial_jitter, snr)]["y_score"] = y_score
             roc_parameters[(spatial_jitter, snr)]["fpr"] = fpr
             roc_parameters[(spatial_jitter, snr)]["tpr"] = tpr
             roc_parameters[(spatial_jitter, snr)]["auc"] = metrics.roc_auc_score(y_true, y_score)
 
     return (
         roc_parameters,
+        direction_simulated_array,
         direction_error,
         direction_error_smooth,
         direction_error_pca,

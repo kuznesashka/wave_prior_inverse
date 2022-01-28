@@ -47,24 +47,25 @@ def create_waves_on_sensors_py(
 
     # pick grad or mag channels
     if channel_type == "mag":
-        G = G[np.arange(2, 306, 3), :]  # magnetometers
+        G = G[np.arange(2, 306, 3), :]
     elif channel_type == "grad":
-        G = G[np.setdiff1d(range(0, 306), np.arange(2, 306, 3)), :]  # gradiometers
+        G = G[np.setdiff1d(range(306), np.arange(2, 306, 3)), :]
     else:
         print("Wrong channel name")
 
-    vert_idx = fwd["src"][hemi_idx][
-        "vertno"
-    ]  # vertex indices picked from the dense grid
-    vertices = fwd["src"][hemi_idx]["rr"][vert_idx, :]  # vertex coordinates
+    # vertex indices picked from the dense grid
+    vert_idx = fwd["src"][hemi_idx]["vertno"]
+    # vertex coordinates
+    vertices = fwd["src"][hemi_idx]["rr"][vert_idx, :]
 
     trimesh_all = fwd["src"][hemi_idx]["tris"]
-    trimesh_global = fwd["src"][hemi_idx][
-        "use_tris"
-    ]  # used triangles (vertex indices in numeration from dense grid)
+    # used triangles (vertex indices in numeration from dense grid)
+    trimesh_global = fwd["src"][hemi_idx]["use_tris"]
     trimesh = np.tile(100000, [trimesh_global.shape[0], trimesh_global.shape[1]])
     mapping = dict(zip(vert_idx, np.arange(0, vert_idx.shape[0])))
-    for i in range(0, len(vert_idx)):  # mapping between dense and sparse indices
+
+    # mapping between dense and sparse indices
+    for i in range(len(vert_idx)):
         val = mapping[vert_idx[i]]
         trimesh[trimesh_global == vert_idx[i]] = val
 
@@ -76,9 +77,8 @@ def create_waves_on_sensors_py(
     vert_normals = fwd["src"][hemi_idx]["nn"][vert_idx, :]
 
     # Create matrix with template paths in different directions from the starting point
-    neighbour_step_1 = vert_conn[start_point, :].nonzero()[
-        1
-    ]  # nearest neighbours of the starting vertex
+    # nearest neighbours of the starting vertex
+    neighbour_step_1 = vert_conn[start_point, :].nonzero()[1]
     num_dir = len(neighbour_step_1)  # number of propagation directions
     path_indices = np.zeros([num_dir, max_step], dtype=int)  # vertices forming the path
 
@@ -97,19 +97,17 @@ def create_waves_on_sensors_py(
     # ind_close = np.where(dist_all < 0.05)[0]
     # trimesh_roi = trimesh[np.unique(np.array([np.where(trimesh == ind_close[s])[0][0] for s in range(0, len(ind_close))]))]
 
-    for n in range(0, num_dir):
+    for n in range(num_dir):
         path_indices[n, 0] = start_point
         neighbour_ind = neighbour_step_1[n]
         path_indices[n, 1] = neighbour_ind
 
-        norm_start = np.mean(
-            vert_normals[neighbour_step_1], axis=0
-        )  # average normal to all of the nearest neighbours
+        # average normal to all of the nearest neighbours
+        norm_start = np.mean(vert_normals[neighbour_step_1], axis=0)
         norm_start = norm_start[:, np.newaxis]
         norm_start = norm_start / np.linalg.norm(norm_start)
-        p_norm = (
-            np.identity(3) - norm_start @ norm_start.T
-        )  # projection away from average normal
+        # projection away from average normal
+        p_norm = (np.identity(3) - norm_start @ norm_start.T)
 
         direction_0 = vertices[neighbour_ind] - vertices[start_point]
         direction_0 = direction_0 @ p_norm.T
@@ -118,7 +116,7 @@ def create_waves_on_sensors_py(
         while d <= max_step - 1:
             neighbour_step_2 = vert_conn[neighbour_ind, :].nonzero()[1]
             cs = np.zeros(len(neighbour_step_2))
-            for p in range(0, len(neighbour_step_2)):
+            for p in range(len(neighbour_step_2)):
                 direction = vertices[neighbour_step_2[p]] - vertices[neighbour_ind]
                 direction = direction @ p_norm.T
                 direction = direction / np.linalg.norm(direction)
@@ -142,7 +140,7 @@ def create_waves_on_sensors_py(
         next = vertices[path_indices[n, 1:]]
         dist = np.sqrt(np.sum((next - first) ** 2, axis=1))
 
-        for s in range(0, len(speeds)):
+        for s in range(len(speeds)):
             l = speeds[s] * tstep
             path_final[n, s, 0, :] = vertices[start_point]
             # path_sphere_final[n, s, 0, :] = vert_normals[start_point]
@@ -270,7 +268,7 @@ def create_waves_on_sensors_py(
     k = np.arange(0, ntpoints * 1 / 100, 1 / 100)
     p = np.tile(t, (len(k), 1)) - np.tile(k.T, (len(t), 1)).T
     wave = np.sin(10 * np.pi * p) * np.exp(-10 * (2 * p + 0.2) ** 2)
-    for i in range(0, ntpoints):
+    for i in range(ntpoints):
         wave[i, :i] = np.zeros(i)
 
     # plt.figure()
@@ -284,16 +282,16 @@ def create_waves_on_sensors_py(
         sensor_waves = np.zeros([num_dir + 1, len(speeds), G.shape[0], T])
     else:
         sensor_waves = np.zeros([num_dir, len(speeds), G.shape[0], T])
-    for s in range(0, len(speeds)):
-        for i in range(0, num_dir):
+    for s in range(len(speeds)):
+        for i in range(num_dir):
             fm_s = np.zeros([G.shape[0], ntpoints])
-            for k in range(0, ntpoints):
+            for k in range(ntpoints):
                 fm_s[:, k] = forward_model[i, s, k, :]
             A = fm_s @ wave
             sensor_waves[i, s, :, :] = A
     if spherical == 1:
-        for s in range(0, len(speeds)):
-            for i in range(0, num_dir):
+        for s in range(len(speeds)):
+            for i in range(num_dir):
                 sensor_waves[num_dir, s, :, :] = (
                     sensor_waves[num_dir, s, :, :] + sensor_waves[i, s, :, :]
                 )
@@ -303,4 +301,4 @@ def create_waves_on_sensors_py(
         sensor_waves,
         direction_curved,
         direction_pca,
-    ]  # , direction_on_sphere, projected_path]
+    ]
