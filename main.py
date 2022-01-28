@@ -4,7 +4,6 @@ from simulations import \
     plot_direction_estimation_error, \
     plot_speed_estimation_error
 from load_input_data import load_input_data
-from create_waves_on_sensors import create_waves_on_sensors
 
 
 wave_generation_params = {
@@ -14,10 +13,10 @@ wave_generation_params = {
 }
 
 data_dir = '/Users/kotkartoshka/Documents/wave_prior_data'
-snr_list = [3]
+snr_list = [1, 2, 3]
 spatial_jitter_list = [0]
 channel_type = "grad"
-simulation_num = 10
+simulation_num = 300
 
 (
     G_dense,
@@ -89,21 +88,3 @@ plot_speed_estimation_error(
     speed_estimated_array=speed_estimated_array,
     wave_generation_params=wave_generation_params
 )
-
-# start_source_index = 100000
-# (
-#     waves_on_sensors,
-#     direction_final,
-#     direction_final_smooth,
-#     direction_pca
-# ) = create_waves_on_sensors(
-#     vertices=vertices,
-#     vertices_smooth=vertices_smooth,
-#     vert_conn=vert_conn,
-#     vert_normals=vert_normals,
-#     G=G,
-#     wave_generation_params=wave_generation_params,
-#     start_source_index=start_source_index,
-#     add_spherical_wave=False,
-#     plot_time_series=False
-# )
