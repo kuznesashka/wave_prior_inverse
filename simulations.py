@@ -6,53 +6,11 @@ from sklearn import metrics
 from typing import List, Dict, Tuple, Any
 from collections import defaultdict
 
+from create_template_paths import find_close_sources
 from create_waves_on_sensors import create_waves_on_sensors
 from create_blob_on_sensors import create_blob_on_sensors
 from generate_brain_noise import generate_brain_noise
 from lasso_inverse_solve import lasso_inverse_solve
-
-
-def find_close_sources(
-        source_index: int,
-        vertices: np.ndarray,
-        vertices_dense: np.ndarray,
-        spatial_jitter: float,
-        area_radius: float = 0.003,
-) -> np.ndarray:
-    """Compute the distance from one source from sparse cortical model to all sources from the dense cortical model.
-    Select close sources disturbed with spatial jitter: distance must be higher than spatial_jitter and lower than
-    spatial jitter + area_radius (in meters).
-
-    Parameters
-    ----------
-    source_index : int
-        Index of fixed source from sparse cortical model.
-    vertices : np.ndarray
-        Vertex coordinates for sparse model [n_sources_sparse x 3].
-    vertices_dense : np.ndarray
-        Vertex coordinates for dense model [n_sources_dense x 3].
-    spatial_jitter : float
-        Spatial error (in meters) introduced while selecting closest sources from dense cortical model to one
-        source from sparse cortical model.
-    area_radius : float
-        Radius (in meters) of area considered as close.
-
-    Returns
-    -------
-    close_sources_index_list : np.ndarray
-        Indices of close sources.
-    """
-    starting_source_coordinates_repeated = np.repeat(
-        vertices[source_index, np.newaxis],
-        vertices_dense.shape[0],
-        axis=0,
-    )
-    distance_vector = np.linalg.norm(starting_source_coordinates_repeated - vertices_dense, axis=1)
-
-    close_sources_index_list = (
-        np.where((distance_vector > spatial_jitter) & (distance_vector <= (spatial_jitter + area_radius)))[0]
-    )
-    return close_sources_index_list
 
 
 def calculate_direction_error(
@@ -131,11 +89,12 @@ def pick_source_counterpart(
         source_index,
         spatial_jitter
 ):
+    # TODO: fix case when there is no close sources
     # find close sources from dense_model
-    close_source_index_list = find_close_sources(
+    close_source_index_list, _ = find_close_sources(
         source_index=source_index,
-        vertices=vertices,
-        vertices_dense=vertices_dense,
+        vertices_source=vertices,
+        vertices_target=vertices_dense,
         spatial_jitter=spatial_jitter,
         area_radius=0.003,
     )

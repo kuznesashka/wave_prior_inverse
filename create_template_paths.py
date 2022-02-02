@@ -2,6 +2,72 @@ import numpy as np
 from typing import List, Dict, Any
 import scipy.sparse.csc as csc
 import matplotlib.pyplot as plt
+from itertools import product
+
+
+def find_close_sources(
+        source_index: int,
+        vertices_source: np.ndarray,
+        vertices_target: np.ndarray,
+        spatial_jitter: float,
+        area_radius: float = 0.003,
+):
+    """Compute the distance from one source from source_cortical_model to all sources from the target_cortical_model.
+    Select close sources disturbed with spatial jitter: distance must be higher than `spatial_jitter` and lower than
+    `spatial_jitter` + `area_radius` (in meters).
+
+    Parameters
+    ----------
+    source_index : int
+        Index of fixed source from sparse cortical model.
+    vertices_source : np.ndarray
+        Vertex coordinates for model the source belongs to [n_sources x 3].
+    vertices_target : np.ndarray
+        Vertex coordinates for target model where we are looking for the close sources [n_sources x 3].
+    spatial_jitter : float
+        Spatial error (in meters) introduced while selecting closest sources from dense cortical model to one
+        source from sparse cortical model.
+    area_radius : float
+        Radius (in meters) of area considered as close.
+
+    Returns
+    -------
+    close_sources_index_list : np.ndarray
+        Indices of close sources.
+    close_distance_vector : np.ndarray
+        Distances to close sources.
+    """
+    sources_num_target = vertices_target.shape[0]
+    starting_source_coordinates_repeated = np.repeat(
+        vertices_source[source_index, np.newaxis],
+        sources_num_target,
+        axis=0,
+    )
+
+    distance_vector = np.linalg.norm(starting_source_coordinates_repeated - vertices_target, axis=1)
+
+    close_source_mask = (distance_vector > spatial_jitter) & (distance_vector <= (spatial_jitter + area_radius))
+    close_source_index_list = np.where(close_source_mask)[0]
+    close_distance_vector = distance_vector[close_source_index_list]
+    return close_source_index_list, close_distance_vector
+
+
+def find_direction_in_space(
+        source_index: int,
+        close_source_index_list,
+        vertices: np.ndarray,
+):
+    close_source_num = len(close_source_index_list)
+    starting_source_coordinates_repeated = np.repeat(
+        vertices[source_index, np.newaxis],
+        close_source_num,
+        axis=0,
+    )
+    direction_array = vertices[close_source_index_list] - starting_source_coordinates_repeated
+    direction_amp = np.linalg.norm(direction_array, axis=1)[:, np.newaxis]
+    direction_cos_array = direction_array / direction_amp
+    direction_array = np.arccos(direction_cos_array) * 180 / np.pi
+    list(product(range(2), range(2), range(2)))
 
 
 def calculate_direction_vector(
@@ -64,6 +130,17 @@ def create_template_paths(
     distance_to_next_source : Dict[int, List[float]]
         Distance to the next source on the path for each propagation direction.
     """
+
+    close_source_index_list, close_source_distance = find_close_sources(
+        source_index=start_source_index,
+        vertices_source=vertices,
+        vertices_target=vertices,
+        spatial_jitter=0,
+        area_radius=0.01,
+    )
+
+
+
     speed_list = wave_generation_params["speeds"]
     max_distance = max(speed_list) * wave_generation_params["duration"]
 

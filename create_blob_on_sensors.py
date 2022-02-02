@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.sparse.csc as csc
-from create_waves_on_sensors import calculate_direction_vector
+from create_template_paths import calculate_direction_vector
 import matplotlib.pyplot as plt
 
 
