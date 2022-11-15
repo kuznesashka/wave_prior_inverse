@@ -1,9 +1,8 @@
-from simulations_roc import simulations
 from direction_error_bst import direction_error_bst
 
 # Simulations
 channel_type = "grad"
-data_dir = "/home/ksasha/PycharmProjects/Wave_prior_inverse"
+data_dir = "wave_prior_inverse"
 
 # wave generation parameters
 params = {
