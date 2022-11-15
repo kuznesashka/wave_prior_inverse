@@ -1,12 +1,12 @@
+from typing import Any, Dict, List
+
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.io
-import matplotlib.pyplot as plt
-
 from sklearn import metrics
-from typing import List, Dict, Any
 
-from create_waves_on_sensors import create_waves_on_sensors
 from create_blob_on_sensors import create_blob_on_sensors
+from create_waves_on_sensors import create_waves_on_sensors
 from generate_brain_noise import generate_brain_noise
 from LASSO_inverse_solve import LASSO_inverse_solve
 
@@ -19,30 +19,38 @@ def direction_error_bst(
     spatial_jitter: List[float],
     num_sim: int = 100,
 ):
-    """Function to run Monte Carlo simulations
+    """
+    Run Monte Carlo simulations
+
     Focus on speed and direction error: as a function of spatial jitter, snr
     All models and forward operators are generated in brainstorm
-        Parameters
-        ----------
-        data_dir : str
-            Data directory with G.mat and cortex.mat
-        channel_type : str
-            Type of channels used 'grad' or 'mag'
-        params : Dict[str, Any]
-            Wave modeling parameters
-        snr : List[float]
-            List with all considered snr values
-        spatial_jitter : List[float]
-            List of lower bounds of spatial jitter values (in m) with spatial jitter distributed uniformly
-            between [jitter[i], jitter[i]+0.003]
-        num_sim : int
-            Number of simulations for one class
-        Returns
-        -------
-        auc : AUC values for all snr levels
-        speed_error : difference between simulated and detected speeds in m/s
-        direction_error : 1-correlation between generated and detected directions
+
+    Parameters
+    ----------
+    data_dir : str
+        Data directory with G.mat and cortex.mat
+    channel_type : str
+        Type of channels used 'grad' or 'mag'
+    params : Dict[str, Any]
+        Wave modeling parameters
+    snr : List[float]
+        List with all considered snr values
+    spatial_jitter : List[float]
+        List of lower bounds of spatial jitter values (in m) with spatial
+        jitter distributed uniformly between [jitter[i], jitter[i]+0.003]
+    num_sim : int
+        Number of simulations for one class
+
+    Returns
+    -------
+    auc :
+        AUC values for all snr levels
+    speed_error :
+        difference between simulated and detected speeds in m/s
+    direction_error :
+        1-correlation between generated and detected directions
         ROC curve plot, Error plots
+
     """
 
     # 1. UPLOADING FORWARD OPERATOR AND CORTICAL MODEL FROM BST
@@ -288,7 +296,7 @@ def direction_error_bst(
                     T=T
                 )
 
-                [sensor_waves, _] = create_waves_on_sensors(
+                [sensor_waves, *_] = create_waves_on_sensors(
                     cortex=cortex,
                     cortex_smooth=cortex_smooth,
                     params=params,
@@ -301,7 +309,7 @@ def direction_error_bst(
                 sensor_blob_norm = sensor_blob / np.linalg.norm(sensor_blob)
                 data = snr[i] * sensor_blob_norm + brain_noise
 
-                [score_fit[sim_n], _] = LASSO_inverse_solve(data=data, waves=sensor_waves, fit_intercept=False)
+                [score_fit[sim_n], *_] = LASSO_inverse_solve(data=data, waves=sensor_waves, fit_intercept=False)
                 print(sim_n)
 
             y_score = score_fit
